@@ -1,0 +1,160 @@
+import { ReactNode, useEffect, useState } from "react";
+import { useNavigate, Link, useLocation } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { LogOut, Users, LayoutDashboard, ClipboardList, MessageSquare, Bell } from "lucide-react";
+import { signOut, checkUserRole } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
+
+interface LayoutProps {
+  children: ReactNode;
+}
+
+const Layout = ({ children }: LayoutProps) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { toast } = useToast();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        navigate("/auth");
+        return;
+      }
+
+      const adminStatus = await checkUserRole(session.user.id);
+      setIsAdmin(adminStatus);
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', session.user.id)
+        .single();
+      
+      if (profile) {
+        setUserName(profile.name);
+      }
+
+      // Get notification count
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const { count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+        .eq('status', 'pending')
+        .lte('scheduled_for', new Date().toISOString());
+      
+      setNotificationCount(count || 0);
+    };
+
+    checkAuth();
+  }, [navigate]);
+
+  const handleLogout = async () => {
+    await signOut();
+    toast({
+      title: "Logged out",
+      description: "You have been successfully logged out."
+    });
+    navigate("/auth");
+  };
+
+  const isActive = (path: string) => location.pathname === path;
+
+  return (
+    <div className="min-h-screen bg-background">
+      <nav className="border-b bg-card">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center space-x-8">
+              <Link to="/dashboard" className="flex items-center space-x-2">
+                <div className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                  LeadFlow
+                </div>
+              </Link>
+              
+              <div className="hidden md:flex space-x-4">
+                <Link to="/dashboard">
+                  <Button
+                    variant={isActive("/dashboard") ? "default" : "ghost"}
+                    className="flex items-center space-x-2"
+                  >
+                    <LayoutDashboard className="h-4 w-4" />
+                    <span>Dashboard</span>
+                  </Button>
+                </Link>
+                
+                <Link to="/leads">
+                  <Button
+                    variant={isActive("/leads") ? "default" : "ghost"}
+                    className="flex items-center space-x-2"
+                  >
+                    <ClipboardList className="h-4 w-4" />
+                    <span>Leads</span>
+                  </Button>
+                </Link>
+                
+                <Link to="/templates">
+                  <Button
+                    variant={isActive("/templates") ? "default" : "ghost"}
+                    className="flex items-center space-x-2"
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                    <span>Templates</span>
+                  </Button>
+                </Link>
+                
+                {isAdmin && (
+                  <Link to="/users">
+                    <Button
+                      variant={isActive("/users") ? "default" : "ghost"}
+                      className="flex items-center space-x-2"
+                    >
+                      <Users className="h-4 w-4" />
+                      <span>Users</span>
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              <Button variant="ghost" size="icon" className="relative">
+                <Bell className="h-5 w-5" />
+                {notificationCount > 0 && (
+                  <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
+                    {notificationCount}
+                  </Badge>
+                )}
+              </Button>
+              
+              <div className="hidden md:flex items-center space-x-2 text-sm">
+                <span className="text-muted-foreground">Welcome,</span>
+                <span className="font-medium">{userName}</span>
+              </div>
+              
+              <Button variant="outline" onClick={handleLogout} className="flex items-center space-x-2">
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Logout</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </nav>
+      
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {children}
+      </main>
+    </div>
+  );
+};
+
+export default Layout;
