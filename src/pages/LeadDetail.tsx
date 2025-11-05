@@ -5,9 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Building2, Globe, Tag, User, Mail, Linkedin, Clock } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, Building2, Globe, Tag, User, Mail, Linkedin, Clock, Edit, Trash2, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
 
 interface POC {
   id: string;
@@ -48,10 +53,20 @@ interface Lead {
 const LeadDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [lead, setLead] = useState<Lead | null>(null);
   const [pocs, setPocs] = useState<POC[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    company_name: "",
+    company_website: "",
+    campaign: "",
+    source: "",
+    notes: ""
+  });
 
   useEffect(() => {
     if (id) {
@@ -80,13 +95,103 @@ const LeadDetail = () => {
           .limit(10)
       ]);
 
-      if (leadResult.data) setLead(leadResult.data as any);
+      if (leadResult.data) {
+        setLead(leadResult.data as any);
+        setEditForm({
+          company_name: leadResult.data.company_name,
+          company_website: leadResult.data.company_website || "",
+          campaign: leadResult.data.campaign || "",
+          source: leadResult.data.source || "",
+          notes: leadResult.data.notes || ""
+        });
+      }
       if (pocsResult.data) setPocs(pocsResult.data);
       if (activitiesResult.data) setActivities(activitiesResult.data as any);
     } catch (error) {
       console.error('Error fetching lead details:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleMarkResponse = async (pocId: string, hasResponse: boolean) => {
+    try {
+      const responseText = hasResponse ? "Responded" : null;
+      
+      await supabase
+        .from('pocs')
+        .update({ response: responseText })
+        .eq('id', pocId);
+
+      if (hasResponse) {
+        // Cancel all pending notifications for this POC
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase
+            .from('notifications')
+            .update({ status: 'cancelled' })
+            .eq('poc_id', pocId)
+            .eq('status', 'pending');
+        }
+      }
+
+      toast({
+        title: hasResponse ? "Response marked" : "Response cleared",
+        description: hasResponse ? "Notifications have been cancelled for this contact." : "Contact marked as no response."
+      });
+
+      fetchLeadDetails(id!);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update response status.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleEditLead = async () => {
+    try {
+      await supabase
+        .from('leads')
+        .update(editForm)
+        .eq('id', id!);
+
+      toast({
+        title: "Lead updated",
+        description: "Lead information has been updated successfully."
+      });
+
+      setEditDialogOpen(false);
+      fetchLeadDetails(id!);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update lead.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeleteLead = async () => {
+    try {
+      await supabase
+        .from('leads')
+        .delete()
+        .eq('id', id!);
+
+      toast({
+        title: "Lead deleted",
+        description: "Lead has been deleted successfully."
+      });
+
+      navigate('/leads');
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete lead.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -109,15 +214,27 @@ const LeadDetail = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/leads")}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold tracking-tight">{lead.company_name}</h1>
-            <p className="text-muted-foreground">
-              Added by {lead.profiles?.name} on {format(new Date(lead.created_at), 'MMM d, yyyy')}
-            </p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/leads")}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div className="flex-1">
+              <h1 className="text-3xl font-bold tracking-tight">{lead.company_name}</h1>
+              <p className="text-muted-foreground">
+                Added by {lead.profiles?.name} on {format(new Date(lead.created_at), 'MMM d, yyyy')}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button variant="outline" onClick={() => setEditDialogOpen(true)}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit
+            </Button>
+            <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
           </div>
         </div>
 
@@ -180,8 +297,33 @@ const LeadDetail = () => {
                         <h4 className="font-semibold flex items-center space-x-2">
                           <User className="h-4 w-4" />
                           <span>{poc.name}</span>
+                          {poc.response && (
+                            <Badge variant="default" className="ml-2">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Responded
+                            </Badge>
+                          )}
                         </h4>
                         {poc.title && <p className="text-sm text-muted-foreground">{poc.title}</p>}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {poc.response ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleMarkResponse(poc.id, false)}
+                          >
+                            Clear Response
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={() => handleMarkResponse(poc.id, true)}
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-1" />
+                            Mark Responded
+                          </Button>
+                        )}
                       </div>
                     </div>
                     
@@ -260,6 +402,87 @@ const LeadDetail = () => {
             </Card>
           </div>
         </div>
+
+        {/* Edit Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Edit Lead</DialogTitle>
+              <DialogDescription>Update the lead information</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="company_name">Company Name *</Label>
+                <Input
+                  id="company_name"
+                  value={editForm.company_name}
+                  onChange={(e) => setEditForm({ ...editForm, company_name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="company_website">Company Website</Label>
+                <Input
+                  id="company_website"
+                  value={editForm.company_website}
+                  onChange={(e) => setEditForm({ ...editForm, company_website: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="campaign">Campaign</Label>
+                  <Input
+                    id="campaign"
+                    value={editForm.campaign}
+                    onChange={(e) => setEditForm({ ...editForm, campaign: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="source">Source</Label>
+                  <Input
+                    id="source"
+                    value={editForm.source}
+                    onChange={(e) => setEditForm({ ...editForm, source: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                  rows={4}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditLead}>Save Changes</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Lead</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this lead? This action cannot be undone and will also delete all associated POCs and activities.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteLead}>
+                Delete Lead
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

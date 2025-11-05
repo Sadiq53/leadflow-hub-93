@@ -49,6 +49,7 @@ const TodayPanel = () => {
             id,
             name,
             linkedin_url,
+            response,
             leads (
               company_name
             )
@@ -61,16 +62,19 @@ const TodayPanel = () => {
         .order('scheduled_for', { ascending: true });
 
       if (notifications) {
-        const formattedTasks = notifications.map((n: any) => ({
-          id: n.id,
-          poc_id: n.poc_id,
-          poc_name: n.pocs.name,
-          company_name: n.pocs.leads.company_name,
-          linkedin_url: n.pocs.linkedin_url,
-          type: n.type,
-          scheduled_for: n.scheduled_for,
-          lead_id: n.lead_id
-        }));
+        // Filter out POCs that have already responded
+        const formattedTasks = notifications
+          .filter((n: any) => !n.pocs.response)
+          .map((n: any) => ({
+            id: n.id,
+            poc_id: n.poc_id,
+            poc_name: n.pocs.name,
+            company_name: n.pocs.leads.company_name,
+            linkedin_url: n.pocs.linkedin_url,
+            type: n.type,
+            scheduled_for: n.scheduled_for,
+            lead_id: n.lead_id
+          }));
         setTasks(formattedTasks);
       }
     } catch (error) {
