@@ -50,6 +50,7 @@ const TodayPanel = () => {
             name,
             linkedin_url,
             response,
+            linkedin_invite_accepted,
             leads (
               company_name
             )
@@ -64,7 +65,7 @@ const TodayPanel = () => {
       if (notifications) {
         // Filter out POCs that have already responded
         const formattedTasks = notifications
-          .filter((n: any) => !n.pocs.response)
+          .filter((n: any) => !n.pocs.response && n.pocs.linkedin_invite_accepted)
           .map((n: any) => ({
             id: n.id,
             poc_id: n.poc_id,

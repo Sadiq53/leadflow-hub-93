@@ -124,20 +124,20 @@ const LeadDetail = () => {
         .eq('id', pocId);
 
       if (hasResponse) {
-        // Cancel all pending notifications for this POC
+        // Cancel all pending notifications for this lead
         const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
+        if (user && id) {
           await supabase
             .from('notifications')
             .update({ status: 'cancelled' })
-            .eq('poc_id', pocId)
+            .eq('lead_id', id)
             .eq('status', 'pending');
         }
       }
 
       toast({
         title: hasResponse ? "Response marked" : "Response cleared",
-        description: hasResponse ? "Notifications have been cancelled for this contact." : "Contact marked as no response."
+        description: hasResponse ? "All notifications for this company have been cancelled." : "Contact marked as no response."
       });
 
       fetchLeadDetails(id!);

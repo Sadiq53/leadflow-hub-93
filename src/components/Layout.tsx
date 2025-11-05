@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, Users, LayoutDashboard, ClipboardList, MessageSquare, Bell } from "lucide-react";
+import { LogOut, Users, LayoutDashboard, ClipboardList, MessageSquare, Bell, UserCheck } from "lucide-react";
 import { signOut, checkUserRole } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -99,6 +99,16 @@ const Layout = ({ children }: LayoutProps) => {
                   >
                     <ClipboardList className="h-4 w-4" />
                     <span>Leads</span>
+                  </Button>
+                </Link>
+                
+                <Link to="/members">
+                  <Button
+                    variant={isActive("/members") ? "default" : "ghost"}
+                    className="flex items-center space-x-2"
+                  >
+                    <UserCheck className="h-4 w-4" />
+                    <span>Members</span>
                   </Button>
                 </Link>
                 

@@ -9,6 +9,7 @@ import Leads from "./pages/Leads";
 import NewLead from "./pages/NewLead";
 import LeadDetail from "./pages/LeadDetail";
 import Templates from "./pages/Templates";
+import Members from "./pages/Members";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/leads/new" element={<NewLead />} />
           <Route path="/leads/:id" element={<LeadDetail />} />
           <Route path="/templates" element={<Templates />} />
+          <Route path="/members" element={<Members />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

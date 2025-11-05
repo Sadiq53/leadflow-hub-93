@@ -153,6 +153,7 @@ export type Database = {
           id: string
           last_contacted_at: string | null
           lead_id: string
+          linkedin_invite_accepted: boolean
           linkedin_url: string | null
           name: string
           outreach_day_1_status:
@@ -173,6 +174,7 @@ export type Database = {
           id?: string
           last_contacted_at?: string | null
           lead_id: string
+          linkedin_invite_accepted?: boolean
           linkedin_url?: string | null
           name: string
           outreach_day_1_status?:
@@ -193,6 +195,7 @@ export type Database = {
           id?: string
           last_contacted_at?: string | null
           lead_id?: string
+          linkedin_invite_accepted?: boolean
           linkedin_url?: string | null
           name?: string
           outreach_day_1_status?:

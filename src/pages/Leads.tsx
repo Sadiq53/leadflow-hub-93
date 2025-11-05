@@ -17,8 +17,9 @@ interface Lead {
   campaign: string | null;
   source: string | null;
   created_at: string;
+  created_by?: string;
   tags: string[] | null;
-  profiles: {
+  profiles?: {
     name: string;
   };
   pocs: { count: number }[];
@@ -36,13 +37,29 @@ const Leads = () => {
 
   const fetchLeads = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: leadsData, error } = await supabase
         .from('leads')
-        .select('id, company_name, company_website, campaign, source, created_at, tags, profiles!leads_created_by_fkey(name), pocs(count)')
+        .select('id, company_name, company_website, campaign, source, created_at, tags, created_by, pocs(count)')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setLeads(data as unknown as Lead[]);
+
+      const createdByIds = Array.from(new Set((leadsData || []).map((l: any) => l.created_by))).filter(Boolean);
+
+      let profilesMap: Record<string, string> = {};
+      if (createdByIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, name')
+          .in('id', createdByIds);
+        profilesMap = Object.fromEntries((profilesData || []).map((p: any) => [p.id, p.name]));
+      }
+
+      const withProfile = (leadsData || []).map((l: any) => ({
+        ...l,
+        profiles: { name: profilesMap[l.created_by] || 'Unknown' }
+      }));
+      setLeads(withProfile as unknown as Lead[]);
     } catch (error) {
       console.error('Error fetching leads:', error);
     } finally {
