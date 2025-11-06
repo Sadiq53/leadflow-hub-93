@@ -125,7 +125,7 @@ const Leads = () => {
                 </TableHeader>
                 <TableBody>
                   {filteredLeads.map((lead) => (
-                    <TableRow key={lead.id} className="cursor-pointer hover:bg-muted/50">
+                    <TableRow key={lead.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/leads/${lead.id}`)}>
                       <TableCell className="font-medium">
                         <div>
                           <div>{lead.company_name}</div>

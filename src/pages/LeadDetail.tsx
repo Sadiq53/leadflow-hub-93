@@ -81,7 +81,7 @@ const LeadDetail = () => {
           .from('leads')
           .select('*, profiles!leads_created_by_fkey(name)')
           .eq('id', leadId)
-          .single(),
+          .maybeSingle(),
         supabase
           .from('pocs')
           .select('*')
