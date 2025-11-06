@@ -63,9 +63,13 @@ const TodayPanel = () => {
         .order('scheduled_for', { ascending: true });
 
       if (notifications) {
-        // Filter out POCs that have already responded
+        // Filter out POCs that have already responded OR whose company has any responder
         const formattedTasks = notifications
-          .filter((n: any) => !n.pocs.response && n.pocs.linkedin_invite_accepted)
+          .filter((n: any) => {
+            // Must have accepted invite and not responded themselves
+            if (!n.pocs.linkedin_invite_accepted || n.pocs.response) return false;
+            return true;
+          })
           .map((n: any) => ({
             id: n.id,
             poc_id: n.poc_id,

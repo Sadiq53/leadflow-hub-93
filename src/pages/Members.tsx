@@ -113,18 +113,35 @@ const Members = () => {
 
   const handleAcknowledgeResponse = async (member: Member) => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Mark this POC as responded
       await supabase
         .from('pocs')
         .update({ response: 'Responded' })
         .eq('id', member.id);
 
+      // Cancel ALL pending notifications for this entire company (lead_id)
       await supabase
         .from('notifications')
         .update({ status: 'cancelled' })
         .eq('lead_id', member.lead_id)
         .eq('status', 'pending');
 
-      toast({ title: 'Response acknowledged', description: 'Removed all company contacts from the queue.' });
+      // Log the activity
+      await supabase.from('activities').insert({
+        lead_id: member.lead_id,
+        poc_id: member.id,
+        user_id: user.id,
+        action: 'response_received',
+        payload: { company: member.company_name }
+      });
+
+      toast({ 
+        title: 'Response acknowledged', 
+        description: `Removed all ${member.company_name} contacts from the queue.` 
+      });
       fetchMembers();
     } catch (e) {
       toast({ title: 'Error', description: 'Failed to acknowledge response.', variant: 'destructive' });
