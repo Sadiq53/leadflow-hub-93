@@ -39,48 +39,47 @@ const TodayPanel = () => {
 
       const { data: notifications } = await supabase
         .from('notifications')
-        .select(`
-          id,
-          poc_id,
-          lead_id,
-          type,
-          scheduled_for,
-          pocs (
-            id,
-            name,
-            linkedin_url,
-            response,
-            linkedin_invite_accepted,
-            leads (
-              company_name
-            )
-          )
-        `)
+        .select('id, poc_id, lead_id, type, scheduled_for')
         .eq('user_id', user.id)
         .eq('status', 'pending')
         .gte('scheduled_for', today.toISOString())
         .lt('scheduled_for', tomorrow.toISOString())
         .order('scheduled_for', { ascending: true });
 
-      if (notifications) {
-        // Filter out POCs that have already responded OR whose company has any responder
+      if (notifications && notifications.length > 0) {
+        const pocIds = Array.from(new Set(notifications.map((n) => n.poc_id).filter(Boolean)));
+        const leadIds = Array.from(new Set(notifications.map((n) => n.lead_id).filter(Boolean)));
+
+        const [{ data: pocsData }, { data: leadsData }, { data: responded }] = await Promise.all([
+          supabase.from('pocs').select('id, name, linkedin_url, response, lead_id').in('id', pocIds),
+          supabase.from('leads').select('id, company_name').in('id', leadIds),
+          supabase.from('pocs').select('lead_id').in('lead_id', leadIds).not('response', 'is', null),
+        ]);
+
+        const respondedLeadIds = new Set((responded || []).map((r: any) => r.lead_id));
+        const pocMap = new Map((pocsData || []).map((p: any) => [p.id, p]));
+        const leadMap = new Map((leadsData || []).map((l: any) => [l.id, l.company_name]));
+
         const formattedTasks = notifications
-          .filter((n: any) => {
-            // Must have accepted invite and not responded themselves
-            if (!n.pocs.linkedin_invite_accepted || n.pocs.response) return false;
-            return true;
+          .filter((n: any) => !respondedLeadIds.has(n.lead_id))
+          .map((n: any) => {
+            const poc = pocMap.get(n.poc_id);
+            if (!poc || poc.response) return null; // also exclude if this POC already responded
+            return {
+              id: n.id,
+              poc_id: n.poc_id,
+              poc_name: poc.name,
+              company_name: leadMap.get(n.lead_id) || 'Unknown',
+              linkedin_url: poc.linkedin_url,
+              type: n.type,
+              scheduled_for: n.scheduled_for,
+              lead_id: n.lead_id,
+            } as TodayTask;
           })
-          .map((n: any) => ({
-            id: n.id,
-            poc_id: n.poc_id,
-            poc_name: n.pocs.name,
-            company_name: n.pocs.leads.company_name,
-            linkedin_url: n.pocs.linkedin_url,
-            type: n.type,
-            scheduled_for: n.scheduled_for,
-            lead_id: n.lead_id
-          }));
+          .filter(Boolean) as TodayTask[];
         setTasks(formattedTasks);
+      } else {
+        setTasks([]);
       }
     } catch (error) {
       console.error('Error fetching tasks:', error);

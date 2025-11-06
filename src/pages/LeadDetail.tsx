@@ -31,7 +31,8 @@ interface Activity {
   id: string;
   action: string;
   created_at: string;
-  profiles: {
+  user_id?: string;
+  profiles?: {
     name: string;
   };
 }
@@ -76,12 +77,13 @@ const LeadDetail = () => {
 
   const fetchLeadDetails = async (leadId: string) => {
     try {
-      const [leadResult, pocsResult, activitiesResult] = await Promise.all([
-        supabase
-          .from('leads')
-          .select('*, profiles!leads_created_by_fkey(name)')
-          .eq('id', leadId)
-          .maybeSingle(),
+      const { data: leadData } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('id', leadId)
+        .maybeSingle();
+
+      const [pocsResult, activitiesResult] = await Promise.all([
         supabase
           .from('pocs')
           .select('*')
@@ -89,14 +91,25 @@ const LeadDetail = () => {
           .order('created_at', { ascending: true }),
         supabase
           .from('activities')
-          .select('id, action, created_at, profiles!activities_user_id_fkey(name)')
+          .select('id, action, created_at, user_id')
           .eq('lead_id', leadId)
           .order('created_at', { ascending: false })
           .limit(10)
       ]);
 
-      if (leadResult.data) {
-        setLead(leadResult.data as any);
+      if (leadData) {
+        // Fetch creator profile name separately (no FK configured)
+        let creatorName = 'Unknown';
+        if ((leadData as any).created_by) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('id', (leadData as any).created_by)
+            .maybeSingle();
+          creatorName = profile?.name || 'Unknown';
+        }
+
+        setLead({ ...(leadData as any), profiles: { name: creatorName } });
         setEditForm({
           company_name: leadResult.data.company_name,
           company_website: leadResult.data.company_website || "",
@@ -391,7 +404,7 @@ const LeadDetail = () => {
                             {activity.action.replace('_', ' ').charAt(0).toUpperCase() + activity.action.slice(1).replace('_', ' ')}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            by {activity.profiles?.name} • {format(new Date(activity.created_at), 'MMM d, h:mm a')}
+                            by {activity.profiles?.name ?? "Unknown"} • {format(new Date(activity.created_at), 'MMM d, h:mm a')}
                           </p>
                         </div>
                       </div>
