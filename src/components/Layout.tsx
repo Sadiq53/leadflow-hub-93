@@ -6,6 +6,7 @@ import { signOut, checkUserRole } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import Logo from '../assets/logo.jpg'
 
 interface LayoutProps {
   children: ReactNode;
@@ -71,13 +72,14 @@ const Layout = ({ children }: LayoutProps) => {
 
   return (
     <div className="min-h-screen bg-background">
-      <nav className="border-b bg-card">
+      <nav className="border-b bg-card py-2">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center space-x-8">
               <Link to="/dashboard" className="flex items-center space-x-2">
+                {/* <img src={Logo} className=" w-[15rem]" /> */}
                 <div className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                  LeadFlow
+                  Crewvia
                 </div>
               </Link>
               

@@ -15,4 +15,12 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    outDir: "dist",
+  },
+  // For Vite's preview server in production build
+  preview: {
+    port: 8080,
+    host: "::",
+  },
 }));
