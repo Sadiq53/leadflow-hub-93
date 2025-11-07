@@ -111,15 +111,32 @@ const LeadDetail = () => {
 
         setLead({ ...(leadData as any), profiles: { name: creatorName } });
         setEditForm({
-          company_name: leadResult.data.company_name,
-          company_website: leadResult.data.company_website || "",
-          campaign: leadResult.data.campaign || "",
-          source: leadResult.data.source || "",
-          notes: leadResult.data.notes || ""
+          company_name: leadData.company_name,
+          company_website: leadData.company_website || "",
+          campaign: leadData.campaign || "",
+          source: leadData.source || "",
+          notes: leadData.notes || ""
         });
       }
       if (pocsResult.data) setPocs(pocsResult.data);
-      if (activitiesResult.data) setActivities(activitiesResult.data as any);
+      
+      // Fetch user names for activities
+      if (activitiesResult.data) {
+        const userIds = Array.from(new Set(activitiesResult.data.map((a: any) => a.user_id).filter(Boolean)));
+        let userMap: Record<string, string> = {};
+        if (userIds.length > 0) {
+          const { data: usersData } = await supabase
+            .from('profiles')
+            .select('id, name')
+            .in('id', userIds);
+          userMap = Object.fromEntries((usersData || []).map((u: any) => [u.id, u.name]));
+        }
+        const withProfiles = activitiesResult.data.map((a: any) => ({
+          ...a,
+          profiles: { name: userMap[a.user_id] || 'Unknown' }
+        }));
+        setActivities(withProfiles);
+      }
     } catch (error) {
       console.error('Error fetching lead details:', error);
     } finally {
