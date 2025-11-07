@@ -1,7 +1,8 @@
 import Layout from "@/components/Layout";
 import TodayPanel from "@/components/TodayPanel";
 import StatsOverview from "@/components/StatsOverview";
-import RecentActivity from "@/components/RecentActivity";
+import RecentActivityEnhanced from "@/components/RecentActivityEnhanced";
+import AutoRemovalMonitor from "@/components/AutoRemovalMonitor";
 
 const Dashboard = () => {
   return (
@@ -17,11 +18,12 @@ const Dashboard = () => {
         <StatsOverview />
 
         <div className="grid gap-6 md:grid-cols-3">
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 space-y-6">
             <TodayPanel />
+            <AutoRemovalMonitor />
           </div>
           <div>
-            <RecentActivity />
+            <RecentActivityEnhanced />
           </div>
         </div>
       </div>

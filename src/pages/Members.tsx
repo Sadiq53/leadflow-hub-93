@@ -8,7 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, Search } from "lucide-react";
+import { CheckCircle2, Search, ThumbsUp, ThumbsDown, Minus, AlertCircle } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 interface Member {
   id: string;
@@ -20,6 +21,9 @@ interface Member {
   company_name: string;
   response: string | null;
   linkedin_invite_accepted: boolean;
+  response_type: string;
+  auto_removed: boolean;
+  invite_accepted_at: string | null;
 }
 
 const Members = () => {
@@ -36,7 +40,7 @@ const Members = () => {
     try {
       const { data, error } = await supabase
         .from('pocs')
-        .select(`id, name, email, linkedin_url, title, response, linkedin_invite_accepted, lead_id, leads(company_name)`)  
+        .select(`id, name, email, linkedin_url, title, response, linkedin_invite_accepted, lead_id, response_type, auto_removed, invite_accepted_at, leads(company_name)`)  
         .order('created_at', { ascending: false });
       if (error) throw error;
       const formatted = (data || []).map((p: any) => ({
@@ -48,6 +52,9 @@ const Members = () => {
         lead_id: p.lead_id,
         response: p.response,
         linkedin_invite_accepted: p.linkedin_invite_accepted,
+        response_type: p.response_type,
+        auto_removed: p.auto_removed,
+        invite_accepted_at: p.invite_accepted_at,
         company_name: p.leads?.company_name || ""
       }));
       setMembers(formatted);
@@ -90,7 +97,10 @@ const Members = () => {
     try {
       await supabase
         .from('pocs')
-        .update({ linkedin_invite_accepted: accepted })
+        .update({ 
+          linkedin_invite_accepted: accepted,
+          invite_accepted_at: accepted ? new Date().toISOString() : null
+        })
         .eq('id', member.id);
 
       if (accepted) {
@@ -111,15 +121,18 @@ const Members = () => {
     }
   };
 
-  const handleAcknowledgeResponse = async (member: Member) => {
+  const handleAcknowledgeResponse = async (member: Member, responseType: 'positive' | 'negative' | 'neutral') => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Mark this POC as responded
+      // Mark this POC with response type
       await supabase
         .from('pocs')
-        .update({ response: 'Responded' })
+        .update({ 
+          response: 'Responded',
+          response_type: responseType
+        })
         .eq('id', member.id);
 
       // Cancel ALL pending notifications for this entire company (lead_id)
@@ -134,13 +147,16 @@ const Members = () => {
         lead_id: member.lead_id,
         poc_id: member.id,
         user_id: user.id,
-        action: 'response_received',
-        payload: { company: member.company_name }
+        action: responseType === 'negative' ? 'negative_response' : 'response_received',
+        metadata: { 
+          company: member.company_name,
+          response_type: responseType
+        }
       });
 
       toast({ 
         title: 'Response acknowledged', 
-        description: `Removed all ${member.company_name} contacts from the queue.` 
+        description: `Marked as ${responseType}. Removed all ${member.company_name} contacts from the queue.` 
       });
       fetchMembers();
     } catch (e) {
@@ -213,16 +229,46 @@ const Members = () => {
                       </TableCell>
                       <TableCell>
                         {m.response ? (
-                          <Badge className="inline-flex items-center"><CheckCircle2 className="h-3 w-3 mr-1" />Responded</Badge>
+                          <Badge 
+                            variant={m.response_type === 'negative' ? 'destructive' : 'default'}
+                            className="inline-flex items-center"
+                          >
+                            {m.response_type === 'positive' && <ThumbsUp className="h-3 w-3 mr-1" />}
+                            {m.response_type === 'negative' && <ThumbsDown className="h-3 w-3 mr-1" />}
+                            {m.response_type === 'neutral' && <Minus className="h-3 w-3 mr-1" />}
+                            {m.response_type === 'positive' ? 'Positive' : m.response_type === 'negative' ? 'Negative' : 'Neutral'}
+                          </Badge>
+                        ) : m.auto_removed ? (
+                          <Badge variant="outline" className="inline-flex items-center">
+                            <AlertCircle className="h-3 w-3 mr-1" />Auto-Removed
+                          </Badge>
                         ) : (
-                          <Badge variant="outline">No</Badge>
+                          <Badge variant="outline">No Response</Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        {!m.response && (
-                          <Button size="sm" onClick={() => handleAcknowledgeResponse(m)}>
-                            <CheckCircle2 className="h-4 w-4 mr-2" /> Acknowledge Response
-                          </Button>
+                        {!m.response && !m.auto_removed && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="sm">
+                                <CheckCircle2 className="h-4 w-4 mr-2" /> Mark Response
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                              <DropdownMenuItem onClick={() => handleAcknowledgeResponse(m, 'positive')}>
+                                <ThumbsUp className="h-4 w-4 mr-2" />
+                                Positive Response
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleAcknowledgeResponse(m, 'neutral')}>
+                                <Minus className="h-4 w-4 mr-2" />
+                                Neutral Response
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleAcknowledgeResponse(m, 'negative')}>
+                                <ThumbsDown className="h-4 w-4 mr-2" />
+                                Negative Response
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                       </TableCell>
                     </TableRow>

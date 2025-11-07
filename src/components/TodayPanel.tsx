@@ -111,6 +111,12 @@ const TodayPanel = () => {
         window.open('https://www.linkedin.com/messaging/', '_blank');
       }
 
+      // Update POC last contacted time
+      await supabase
+        .from('pocs')
+        .update({ last_contacted_at: new Date().toISOString() })
+        .eq('id', task.poc_id);
+
       // Mark notification as sent
       await supabase
         .from('notifications')
@@ -125,7 +131,7 @@ const TodayPanel = () => {
           poc_id: task.poc_id,
           user_id: user.id,
           action: 'message_sent',
-          payload: { type: task.type }
+          metadata: { type: task.type, status: 'sent' }
         });
       }
 
@@ -197,22 +203,31 @@ const TodayPanel = () => {
               </div>
               
               <div className="flex items-center space-x-2">
-                <Button
-                  onClick={() => handleSendMessage(task)}
-                  className="flex items-center space-x-2"
-                >
-                  <Copy className="h-4 w-4" />
-                  <span>Send Message</span>
-                  <ExternalLink className="h-4 w-4" />
-                </Button>
-                
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleMarkComplete(task.id)}
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                </Button>
+                {(() => {
+                  // Check if follow-up is allowed (within 2 days of invite acceptance)
+                  const canSendFollowup = task.type.includes('message') || task.type.includes('follow');
+                  return (
+                    <>
+                      <Button
+                        onClick={() => handleSendMessage(task)}
+                        className="flex items-center space-x-2"
+                        disabled={!canSendFollowup}
+                      >
+                        <Copy className="h-4 w-4" />
+                        <span>Send Message</span>
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                      
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleMarkComplete(task.id)}
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                      </Button>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           ))}

@@ -20,6 +20,7 @@ export type Database = {
           created_at: string
           id: string
           lead_id: string | null
+          metadata: Json | null
           payload: Json | null
           poc_id: string | null
           user_id: string
@@ -29,6 +30,7 @@ export type Database = {
           created_at?: string
           id?: string
           lead_id?: string | null
+          metadata?: Json | null
           payload?: Json | null
           poc_id?: string | null
           user_id: string
@@ -38,6 +40,7 @@ export type Database = {
           created_at?: string
           id?: string
           lead_id?: string | null
+          metadata?: Json | null
           payload?: Json | null
           poc_id?: string | null
           user_id?: string
@@ -148,9 +151,13 @@ export type Database = {
       }
       pocs: {
         Row: {
+          auto_removed: boolean | null
+          auto_removed_at: string | null
+          auto_removed_reason: string | null
           created_at: string
           email: string | null
           id: string
+          invite_accepted_at: string | null
           last_contacted_at: string | null
           lead_id: string
           linkedin_invite_accepted: boolean
@@ -166,12 +173,17 @@ export type Database = {
             | Database["public"]["Enums"]["outreach_status"]
             | null
           response: string | null
+          response_type: Database["public"]["Enums"]["response_type"] | null
           title: string | null
         }
         Insert: {
+          auto_removed?: boolean | null
+          auto_removed_at?: string | null
+          auto_removed_reason?: string | null
           created_at?: string
           email?: string | null
           id?: string
+          invite_accepted_at?: string | null
           last_contacted_at?: string | null
           lead_id: string
           linkedin_invite_accepted?: boolean
@@ -187,12 +199,17 @@ export type Database = {
             | Database["public"]["Enums"]["outreach_status"]
             | null
           response?: string | null
+          response_type?: Database["public"]["Enums"]["response_type"] | null
           title?: string | null
         }
         Update: {
+          auto_removed?: boolean | null
+          auto_removed_at?: string | null
+          auto_removed_reason?: string | null
           created_at?: string
           email?: string | null
           id?: string
+          invite_accepted_at?: string | null
           last_contacted_at?: string | null
           lead_id?: string
           linkedin_invite_accepted?: boolean
@@ -208,6 +225,7 @@ export type Database = {
             | Database["public"]["Enums"]["outreach_status"]
             | null
           response?: string | null
+          response_type?: Database["public"]["Enums"]["response_type"] | null
           title?: string | null
         }
         Relationships: [
@@ -300,6 +318,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      auto_remove_stale_members: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -307,6 +326,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_followup_allowed: { Args: { poc_id_param: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "user"
@@ -316,6 +336,7 @@ export type Database = {
         | "messaged"
         | "responded"
         | "no_response"
+      response_type: "positive" | "negative" | "neutral" | "no_response"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -451,6 +472,7 @@ export const Constants = {
         "responded",
         "no_response",
       ],
+      response_type: ["positive", "negative", "neutral", "no_response"],
     },
   },
 } as const
