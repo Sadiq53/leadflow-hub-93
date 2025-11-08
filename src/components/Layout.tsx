@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, Users, LayoutDashboard, ClipboardList, MessageSquare, Bell, UserCheck } from "lucide-react";
+import { LogOut, Users, LayoutDashboard, ClipboardList, MessageSquare, Bell, UserCheck, Activity } from "lucide-react";
 import { signOut, checkUserRole } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -125,15 +125,27 @@ const Layout = ({ children }: LayoutProps) => {
                 </Link>
                 
                 {isAdmin && (
-                  <Link to="/users">
-                    <Button
-                      variant={isActive("/users") ? "default" : "ghost"}
-                      className="flex items-center space-x-2"
-                    >
-                      <Users className="h-4 w-4" />
-                      <span>Users</span>
-                    </Button>
-                  </Link>
+                  <>
+                    <Link to="/system-health">
+                      <Button
+                        variant={isActive("/system-health") ? "default" : "ghost"}
+                        className="flex items-center space-x-2"
+                      >
+                        <Activity className="h-4 w-4" />
+                        <span>System Health</span>
+                      </Button>
+                    </Link>
+                    
+                    <Link to="/users">
+                      <Button
+                        variant={isActive("/users") ? "default" : "ghost"}
+                        className="flex items-center space-x-2"
+                      >
+                        <Users className="h-4 w-4" />
+                        <span>Users</span>
+                      </Button>
+                    </Link>
+                  </>
                 )}
               </div>
             </div>

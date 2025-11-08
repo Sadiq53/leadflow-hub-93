@@ -3,31 +3,27 @@ import TodayPanel from "@/components/TodayPanel";
 import StatsOverview from "@/components/StatsOverview";
 import RecentActivityEnhanced from "@/components/RecentActivityEnhanced";
 import AutoRemovalMonitor from "@/components/AutoRemovalMonitor";
-import SystemHealthCheck from "@/components/SystemHealthCheck";
+import NegativeResponsesList from "@/components/NegativeResponsesList";
 
 const Dashboard = () => {
   return (
     <Layout>
-      <div className="space-y-8">
+      <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Welcome back! Here's your outreach overview.
-          </p>
+          <p className="text-muted-foreground">Overview of your outreach activities</p>
+        </div>
+        
+        <StatsOverview />
+        
+        <div className="grid gap-6 md:grid-cols-2">
+          <TodayPanel />
+          <AutoRemovalMonitor />
         </div>
 
-        <StatsOverview />
-
-        <SystemHealthCheck />
-
-        <div className="grid gap-6 md:grid-cols-3">
-          <div className="md:col-span-2 space-y-6">
-            <TodayPanel />
-            <AutoRemovalMonitor />
-          </div>
-          <div>
-            <RecentActivityEnhanced />
-          </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          <RecentActivityEnhanced />
+          <NegativeResponsesList />
         </div>
       </div>
     </Layout>
