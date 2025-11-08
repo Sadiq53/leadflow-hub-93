@@ -89,15 +89,32 @@ const TodayPanel = () => {
   };
 
   const handleSendMessage = async (task: TodayTask) => {
-    // Get a template and replace tokens
-    const message = `Hi {{firstName}}, I wanted to reach out regarding {{company}}...`;
-    const firstName = task.poc_name.split(' ')[0];
-    const finalMessage = message
-      .replace('{{firstName}}', firstName)
-      .replace('{{company}}', task.company_name);
-
-    // Copy to clipboard
     try {
+      // Fetch current user
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) return;
+
+      // Fetch available templates
+      const { data: templates } = await supabase
+        .from('templates')
+        .select('*')
+        .or(`created_by.eq.${currentUser.id},is_shared.eq.true`)
+        .limit(1);
+
+      // Use first template or default message
+      const templateBody = templates && templates.length > 0 
+        ? templates[0].body 
+        : `Hi {firstName}, I wanted to reach out regarding {company}...`;
+
+      // Replace placeholders
+      const firstName = task.poc_name.split(' ')[0];
+      const finalMessage = templateBody
+        .replace(/{firstName}/g, firstName)
+        .replace(/\{firstName\}/g, firstName)
+        .replace(/{company}/g, task.company_name)
+        .replace(/\{company\}/g, task.company_name);
+
+      // Copy to clipboard
       await navigator.clipboard.writeText(finalMessage);
       toast({
         title: "Message copied!",
@@ -137,9 +154,10 @@ const TodayPanel = () => {
 
       fetchTodayTasks();
     } catch (error) {
+      console.error('Error sending message:', error);
       toast({
         title: "Error",
-        description: "Failed to copy message. Please try again.",
+        description: "Failed to send message. Please try again.",
         variant: "destructive"
       });
     }

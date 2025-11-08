@@ -3,6 +3,7 @@ import TodayPanel from "@/components/TodayPanel";
 import StatsOverview from "@/components/StatsOverview";
 import RecentActivityEnhanced from "@/components/RecentActivityEnhanced";
 import AutoRemovalMonitor from "@/components/AutoRemovalMonitor";
+import SystemHealthCheck from "@/components/SystemHealthCheck";
 
 const Dashboard = () => {
   return (
@@ -16,6 +17,8 @@ const Dashboard = () => {
         </div>
 
         <StatsOverview />
+
+        <SystemHealthCheck />
 
         <div className="grid gap-6 md:grid-cols-3">
           <div className="md:col-span-2 space-y-6">
