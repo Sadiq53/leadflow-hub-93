@@ -6,10 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, Search, ThumbsUp, ThumbsDown, Minus, AlertCircle } from "lucide-react";
+import { CheckCircle2, Search, ThumbsUp, ThumbsDown, Minus, AlertCircle, Trash2, Send } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Member {
   id: string;
@@ -30,6 +41,9 @@ const Members = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDialog, setShowBulkDialog] = useState(false);
+  const [bulkAction, setBulkAction] = useState<'remove' | 'followup' | 'status' | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -164,6 +178,166 @@ const Members = () => {
     }
   };
 
+  const toggleSelection = (id: string) => {
+    const newSelection = new Set(selectedIds);
+    if (newSelection.has(id)) {
+      newSelection.delete(id);
+    } else {
+      newSelection.add(id);
+    }
+    setSelectedIds(newSelection);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(m => m.id)));
+    }
+  };
+
+  const handleBulkRemove = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const selectedMembers = members.filter(m => selectedIds.has(m.id));
+      
+      await supabase
+        .from('pocs')
+        .update({ 
+          auto_removed: true,
+          auto_removed_at: new Date().toISOString(),
+          auto_removed_reason: 'Bulk removal'
+        })
+        .in('id', Array.from(selectedIds));
+
+      // Cancel pending notifications
+      await supabase
+        .from('notifications')
+        .update({ status: 'cancelled' })
+        .in('poc_id', Array.from(selectedIds))
+        .eq('status', 'pending');
+
+      // Log activities
+      for (const member of selectedMembers) {
+        await supabase.from('activities').insert({
+          lead_id: member.lead_id,
+          poc_id: member.id,
+          user_id: user.id,
+          action: 'bulk_removed',
+          metadata: { company: member.company_name }
+        });
+      }
+
+      toast({ 
+        title: 'Bulk removal complete', 
+        description: `Removed ${selectedIds.size} member(s) from queue.` 
+      });
+      
+      setSelectedIds(new Set());
+      setShowBulkDialog(false);
+      fetchMembers();
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to remove members.', variant: 'destructive' });
+    }
+  };
+
+  const handleBulkFollowup = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const selectedMembers = members.filter(m => selectedIds.has(m.id));
+      let scheduledCount = 0;
+
+      for (const member of selectedMembers) {
+        // Check if follow-up is allowed
+        const { data: isAllowed } = await supabase.rpc('is_followup_allowed', { 
+          poc_id_param: member.id 
+        });
+
+        if (isAllowed) {
+          await scheduleSequenceForPoc(member);
+          scheduledCount++;
+        }
+      }
+
+      toast({ 
+        title: 'Bulk follow-up scheduled', 
+        description: `Scheduled follow-ups for ${scheduledCount} member(s). ${selectedIds.size - scheduledCount} skipped (outside 2-day window or auto-removed).` 
+      });
+      
+      setSelectedIds(new Set());
+      setShowBulkDialog(false);
+      fetchMembers();
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to schedule follow-ups.', variant: 'destructive' });
+    }
+  };
+
+  const handleBulkStatusChange = async (responseType: 'positive' | 'negative' | 'neutral') => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const selectedMembers = members.filter(m => selectedIds.has(m.id));
+
+      // Update all selected POCs
+      await supabase
+        .from('pocs')
+        .update({ 
+          response: 'Responded',
+          response_type: responseType
+        })
+        .in('id', Array.from(selectedIds));
+
+      // Get unique lead_ids
+      const leadIds = [...new Set(selectedMembers.map(m => m.lead_id))];
+
+      // Cancel pending notifications for all affected leads
+      await supabase
+        .from('notifications')
+        .update({ status: 'cancelled' })
+        .in('lead_id', leadIds)
+        .eq('status', 'pending');
+
+      // Log activities
+      for (const member of selectedMembers) {
+        await supabase.from('activities').insert({
+          lead_id: member.lead_id,
+          poc_id: member.id,
+          user_id: user.id,
+          action: responseType === 'negative' ? 'negative_response' : 'response_received',
+          metadata: { 
+            company: member.company_name,
+            response_type: responseType,
+            bulk_action: true
+          }
+        });
+      }
+
+      toast({ 
+        title: 'Bulk status update complete', 
+        description: `Updated ${selectedIds.size} member(s) to ${responseType} status.` 
+      });
+      
+      setSelectedIds(new Set());
+      setShowBulkDialog(false);
+      fetchMembers();
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to update status.', variant: 'destructive' });
+    }
+  };
+
+  const executeBulkAction = () => {
+    if (bulkAction === 'remove') {
+      handleBulkRemove();
+    } else if (bulkAction === 'followup') {
+      handleBulkFollowup();
+    }
+  };
+
   const filtered = members.filter(m =>
     m.name.toLowerCase().includes(search.toLowerCase()) ||
     m.company_name.toLowerCase().includes(search.toLowerCase())
@@ -191,6 +365,67 @@ const Members = () => {
           </CardContent>
         </Card>
 
+        {selectedIds.size > 0 && (
+          <Card className="border-primary">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">{selectedIds.size} selected</Badge>
+                  <Button variant="outline" size="sm" onClick={() => setSelectedIds(new Set())}>
+                    Clear Selection
+                  </Button>
+                </div>
+                <div className="flex gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="outline">
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        Bulk Status Change
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem onClick={() => handleBulkStatusChange('positive')}>
+                        <ThumbsUp className="h-4 w-4 mr-2" />
+                        Mark as Positive
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleBulkStatusChange('neutral')}>
+                        <Minus className="h-4 w-4 mr-2" />
+                        Mark as Neutral
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleBulkStatusChange('negative')}>
+                        <ThumbsDown className="h-4 w-4 mr-2" />
+                        Mark as Negative
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => {
+                      setBulkAction('followup');
+                      setShowBulkDialog(true);
+                    }}
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    Bulk Follow-up
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="destructive"
+                    onClick={() => {
+                      setBulkAction('remove');
+                      setShowBulkDialog(true);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Bulk Remove
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle>
@@ -204,6 +439,12 @@ const Members = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox 
+                        checked={selectedIds.size === filtered.length && filtered.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Company</TableHead>
                     <TableHead>Invite Accepted</TableHead>
@@ -214,6 +455,12 @@ const Members = () => {
                 <TableBody>
                   {filtered.map((m) => (
                     <TableRow key={m.id}>
+                      <TableCell>
+                        <Checkbox 
+                          checked={selectedIds.has(m.id)}
+                          onCheckedChange={() => toggleSelection(m.id)}
+                        />
+                      </TableCell>
                       <TableCell>
                         <div className="font-medium">{m.name}</div>
                         {m.title && <div className="text-xs text-muted-foreground">{m.title}</div>}
@@ -279,6 +526,27 @@ const Members = () => {
           </CardContent>
         </Card>
       </div>
+
+      <AlertDialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {bulkAction === 'remove' && 'Confirm Bulk Removal'}
+              {bulkAction === 'followup' && 'Confirm Bulk Follow-up'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {bulkAction === 'remove' && `You are about to remove ${selectedIds.size} member(s) from the queue. This will cancel all pending notifications for these members.`}
+              {bulkAction === 'followup' && `You are about to schedule follow-ups for ${selectedIds.size} member(s). Only members within the 2-day window will be scheduled.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={executeBulkAction}>
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 };
