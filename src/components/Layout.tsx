@@ -142,7 +142,7 @@ const Layout = ({ children }: LayoutProps) => {
                         className="flex items-center space-x-2"
                       >
                         <Settings className="h-4 w-4" />
-                        <span>Dev Tools</span>
+                        <span>Dev Mode</span>
                       </Button>
                     </Link>
                     
