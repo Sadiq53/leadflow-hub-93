@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, Users, LayoutDashboard, ClipboardList, MessageSquare, Bell, UserCheck, Activity } from "lucide-react";
+import { LogOut, Users, LayoutDashboard, ClipboardList, MessageSquare, Bell, UserCheck, Activity, Settings } from "lucide-react";
 import { signOut, checkUserRole } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -133,6 +133,16 @@ const Layout = ({ children }: LayoutProps) => {
                       >
                         <Activity className="h-4 w-4" />
                         <span>System Health</span>
+                      </Button>
+                    </Link>
+                    
+                    <Link to="/dev-tools">
+                      <Button
+                        variant={isActive("/dev-tools") ? "default" : "ghost"}
+                        className="flex items-center space-x-2"
+                      >
+                        <Settings className="h-4 w-4" />
+                        <span>Dev Tools</span>
                       </Button>
                     </Link>
                     

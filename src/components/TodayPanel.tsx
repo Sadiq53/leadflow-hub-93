@@ -50,21 +50,19 @@ const TodayPanel = () => {
         const pocIds = Array.from(new Set(notifications.map((n) => n.poc_id).filter(Boolean)));
         const leadIds = Array.from(new Set(notifications.map((n) => n.lead_id).filter(Boolean)));
 
-        const [{ data: pocsData }, { data: leadsData }, { data: responded }] = await Promise.all([
-          supabase.from('pocs').select('id, name, linkedin_url, response, lead_id').in('id', pocIds),
+        const [{ data: pocsData }, { data: leadsData }] = await Promise.all([
+          supabase.from('pocs').select('id, name, linkedin_url, response_type, lead_id').in('id', pocIds),
           supabase.from('leads').select('id, company_name').in('id', leadIds),
-          supabase.from('pocs').select('lead_id').in('lead_id', leadIds).not('response', 'is', null),
         ]);
 
-        const respondedLeadIds = new Set((responded || []).map((r: any) => r.lead_id));
         const pocMap = new Map((pocsData || []).map((p: any) => [p.id, p]));
         const leadMap = new Map((leadsData || []).map((l: any) => [l.id, l.company_name]));
 
         const formattedTasks = notifications
-          .filter((n: any) => !respondedLeadIds.has(n.lead_id))
           .map((n: any) => {
             const poc = pocMap.get(n.poc_id);
-            if (!poc || poc.response) return null; // also exclude if this POC already responded
+            // Exclude POCs with negative responses or already responded positively
+            if (!poc || poc.response_type === 'negative') return null;
             return {
               id: n.id,
               poc_id: n.poc_id,

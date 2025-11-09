@@ -12,6 +12,7 @@ import Templates from "./pages/Templates";
 import Members from "./pages/Members";
 import Analytics from "./pages/Analytics";
 import SystemHealth from "./pages/SystemHealth";
+import DevTools from "./pages/DevTools";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +34,7 @@ const App = () => (
           <Route path="/members" element={<Members />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/system-health" element={<SystemHealth />} />
+          <Route path="/dev-tools" element={<DevTools />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
