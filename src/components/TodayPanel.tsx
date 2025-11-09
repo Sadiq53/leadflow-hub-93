@@ -25,6 +25,37 @@ const TodayPanel = () => {
 
   useEffect(() => {
     fetchTodayTasks();
+
+    // Set up realtime subscriptions for automatic updates
+    const channel = supabase
+      .channel('today-tasks-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications'
+        },
+        () => {
+          fetchTodayTasks();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pocs'
+        },
+        () => {
+          fetchTodayTasks();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchTodayTasks = async () => {

@@ -25,9 +25,30 @@ const AutoRemovalMonitor = () => {
 
   useEffect(() => {
     checkStaleMembers();
+    
     // Auto-check every 5 minutes
     const interval = setInterval(checkStaleMembers, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    
+    // Set up realtime subscription for instant updates
+    const channel = supabase
+      .channel('stale-members-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pocs'
+        },
+        () => {
+          checkStaleMembers();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const checkStaleMembers = async () => {

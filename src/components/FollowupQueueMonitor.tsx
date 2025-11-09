@@ -39,6 +39,37 @@ const FollowupQueueMonitor = () => {
 
   useEffect(() => {
     fetchQueueMembers();
+
+    // Set up realtime subscriptions for instant updates
+    const channel = supabase
+      .channel('queue-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pocs'
+        },
+        () => {
+          fetchQueueMembers();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications'
+        },
+        () => {
+          fetchQueueMembers();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchQueueMembers = async () => {
