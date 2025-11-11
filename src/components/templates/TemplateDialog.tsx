@@ -4,12 +4,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Template {
   id: string;
   name: string;
   body: string;
   is_shared: boolean;
+  followup_day?: number | null;
 }
 
 interface TemplateDialogProps {
@@ -50,6 +52,20 @@ export const TemplateDialog = ({ isOpen, onClose, onSubmit, editingTemplate }: T
               defaultValue={editingTemplate?.body}
               required
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="followup_day">Follow-up Day (Optional)</Label>
+            <Select name="followup_day" defaultValue={editingTemplate?.followup_day?.toString() || ""}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select follow-up day..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Not specified</SelectItem>
+                <SelectItem value="1">Day 1 - Initial Connection</SelectItem>
+                <SelectItem value="2">Day 2 - First Follow-up</SelectItem>
+                <SelectItem value="3">Day 3 - Second Follow-up</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex items-center space-x-2">
             <Switch 

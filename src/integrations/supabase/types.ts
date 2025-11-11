@@ -72,6 +72,7 @@ export type Database = {
           id: string
           notes: string | null
           source: string | null
+          source_link: string | null
           tags: string[] | null
         }
         Insert: {
@@ -83,6 +84,7 @@ export type Database = {
           id?: string
           notes?: string | null
           source?: string | null
+          source_link?: string | null
           tags?: string[] | null
         }
         Update: {
@@ -94,6 +96,7 @@ export type Database = {
           id?: string
           notes?: string | null
           source?: string | null
+          source_link?: string | null
           tags?: string[] | null
         }
         Relationships: []
@@ -270,6 +273,7 @@ export type Database = {
           body: string
           created_at: string
           created_by: string
+          followup_day: number | null
           id: string
           is_shared: boolean | null
           name: string
@@ -278,6 +282,7 @@ export type Database = {
           body: string
           created_at?: string
           created_by: string
+          followup_day?: number | null
           id?: string
           is_shared?: boolean | null
           name: string
@@ -286,6 +291,7 @@ export type Database = {
           body?: string
           created_at?: string
           created_by?: string
+          followup_day?: number | null
           id?: string
           is_shared?: boolean | null
           name?: string

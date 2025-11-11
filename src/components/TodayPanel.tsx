@@ -123,11 +123,17 @@ const TodayPanel = () => {
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) return;
 
-      // Fetch available templates
+      // Determine which day this is based on task type
+      let followupDay = 1;
+      if (task.type === 'send_message_a' || task.type.includes('follow_up_1')) followupDay = 2;
+      if (task.type === 'send_message_b' || task.type.includes('follow_up_2')) followupDay = 3;
+
+      // Fetch templates matching this followup day
       const { data: templates } = await supabase
         .from('templates')
         .select('*')
         .or(`created_by.eq.${currentUser.id},is_shared.eq.true`)
+        .eq('followup_day', followupDay)
         .limit(1);
 
       // Use first template or default message

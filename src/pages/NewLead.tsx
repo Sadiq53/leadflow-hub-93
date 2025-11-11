@@ -24,6 +24,7 @@ const leadSchema = z.object({
   company_website: z.string().url("Invalid URL").optional().or(z.literal("")),
   campaign: z.string().max(100).optional(),
   source: z.string().max(100).optional(),
+  source_link: z.string().url("Invalid URL").optional().or(z.literal("")),
   notes: z.string().max(1000).optional()
 });
 
@@ -72,6 +73,7 @@ const NewLead = () => {
         company_website: formData.get("company_website") as string,
         campaign: formData.get("campaign") as string,
         source: formData.get("source") as string,
+        source_link: formData.get("source_link") as string,
         notes: formData.get("notes") as string
       };
 
@@ -98,6 +100,7 @@ const NewLead = () => {
           company_website: leadData.company_website || null,
           campaign: leadData.campaign || null,
           source: leadData.source || null,
+          source_link: leadData.source_link || null,
           notes: leadData.notes || null,
           created_by: user.id
         })
@@ -106,8 +109,8 @@ const NewLead = () => {
 
       if (leadError) throw leadError;
 
-      // Create POCs
-      const { error: pocsError } = await supabase
+      // Create POCs and get their IDs back
+      const { data: createdPocs, error: pocsError } = await supabase
         .from("pocs")
         .insert(
           validPocs.map((poc) => ({
@@ -117,7 +120,8 @@ const NewLead = () => {
             linkedin_url: poc.linkedin_url || null,
             title: poc.title || null
           }))
-        );
+        )
+        .select();
 
       if (pocsError) throw pocsError;
 
@@ -133,10 +137,9 @@ const NewLead = () => {
       const notifications = [];
       const now = new Date();
       
-      for (const poc of validPocs) {
-        // Day 1 - Connection
+      for (const poc of createdPocs || []) {
+        // Day 1 - Connection (scheduled immediately for today)
         const day1 = new Date(now);
-        day1.setDate(day1.getDate() + 1);
         notifications.push({
           user_id: user.id,
           lead_id: lead.id,
@@ -145,34 +148,12 @@ const NewLead = () => {
           scheduled_for: day1.toISOString(),
           status: "pending"
         });
-
-        // Day 2 - Message A
-        const day2 = new Date(now);
-        day2.setDate(day2.getDate() + 2);
-        notifications.push({
-          user_id: user.id,
-          lead_id: lead.id,
-          poc_id: poc.id,
-          type: "send_message_a",
-          scheduled_for: day2.toISOString(),
-          status: "pending"
-        });
-
-        // Day 3 - Message B
-        const day3 = new Date(now);
-        day3.setDate(day3.getDate() + 3);
-        notifications.push({
-          user_id: user.id,
-          lead_id: lead.id,
-          poc_id: poc.id,
-          type: "send_message_b",
-          scheduled_for: day3.toISOString(),
-          status: "pending"
-        });
       }
 
-      // This will fail silently for now since we need the POC IDs after insert
-      // In a real scenario, we'd need to return the POC IDs after insert
+      // Insert initial connection notifications
+      if (notifications.length > 0) {
+        await supabase.from("notifications").insert(notifications);
+      }
       
       toast({
         title: "Lead created!",
@@ -236,6 +217,10 @@ const NewLead = () => {
                   <div className="space-y-2">
                     <Label htmlFor="source">Source</Label>
                     <Input id="source" name="source" placeholder="LinkedIn, Referral, Event" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="source_link">Source Link</Label>
+                    <Input id="source_link" name="source_link" type="url" placeholder="https://linkedin.com/sales/..." />
                   </div>
                 </div>
                 <div className="space-y-2">

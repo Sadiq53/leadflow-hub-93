@@ -16,6 +16,7 @@ interface Template {
   is_shared: boolean;
   created_at: string;
   created_by: string;
+  followup_day?: number | null;
 }
 
 const Templates = () => {
@@ -57,6 +58,7 @@ const Templates = () => {
     const name = formData.get('name') as string;
     const body = formData.get('body') as string;
     const isShared = formData.get('is_shared') === 'on';
+    const followupDay = formData.get('followup_day') as string;
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -64,7 +66,12 @@ const Templates = () => {
     if (editingTemplate) {
       const { error } = await supabase
         .from('templates')
-        .update({ name, body, is_shared: isShared })
+        .update({ 
+          name, 
+          body, 
+          is_shared: isShared,
+          followup_day: followupDay ? parseInt(followupDay) : null
+        })
         .eq('id', editingTemplate.id);
 
       if (error) {
@@ -89,6 +96,7 @@ const Templates = () => {
           name,
           body,
           is_shared: isShared,
+          followup_day: followupDay ? parseInt(followupDay) : null,
           created_by: user.id
         });
 
