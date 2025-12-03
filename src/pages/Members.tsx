@@ -84,7 +84,13 @@ const Members = () => {
     if (!user) return;
 
     const now = new Date();
-    const day2 = new Date(now); day2.setDate(day2.getDate() + 1);
+    // Day 2 - First follow-up (24 hours after invite acceptance)
+    const day2 = new Date(now);
+    day2.setDate(day2.getDate() + 1);
+    
+    // Day 3 - Second follow-up (48 hours after invite acceptance)
+    const day3 = new Date(now);
+    day3.setDate(day3.getDate() + 2);
 
     const notifications = [
       {
@@ -92,7 +98,7 @@ const Members = () => {
         lead_id: member.lead_id,
         poc_id: member.id,
         type: 'send_message_a',
-        scheduled_for: now.toISOString(),
+        scheduled_for: day2.toISOString(), // 24 hours later
         status: 'pending'
       },
       {
@@ -100,7 +106,7 @@ const Members = () => {
         lead_id: member.lead_id,
         poc_id: member.id,
         type: 'send_message_b',
-        scheduled_for: day2.toISOString(),
+        scheduled_for: day3.toISOString(), // 48 hours later
         status: 'pending'
       }
     ];

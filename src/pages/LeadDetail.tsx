@@ -43,6 +43,7 @@ interface Lead {
   company_website: string | null;
   campaign: string | null;
   source: string | null;
+  source_link: string | null;
   notes: string | null;
   tags: string[] | null;
   created_at: string;
@@ -66,6 +67,7 @@ const LeadDetail = () => {
     company_website: "",
     campaign: "",
     source: "",
+    source_link: "",
     notes: ""
   });
 
@@ -115,6 +117,7 @@ const LeadDetail = () => {
           company_website: leadData.company_website || "",
           campaign: leadData.campaign || "",
           source: leadData.source || "",
+          source_link: (leadData as any).source_link || "",
           notes: leadData.notes || ""
         });
       }
@@ -299,6 +302,16 @@ const LeadDetail = () => {
                     <div className="flex items-center space-x-2">
                       <Building2 className="h-4 w-4 text-muted-foreground" />
                       <span>Source: {lead.source}</span>
+                      {lead.source_link && (
+                        <a
+                          href={lead.source_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline text-sm"
+                        >
+                          (View Link)
+                        </a>
+                      )}
                     </div>
                   )}
                 </div>
@@ -474,6 +487,16 @@ const LeadDetail = () => {
                     onChange={(e) => setEditForm({ ...editForm, source: e.target.value })}
                   />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="source_link">Source Link</Label>
+                <Input
+                  id="source_link"
+                  type="url"
+                  value={editForm.source_link}
+                  onChange={(e) => setEditForm({ ...editForm, source_link: e.target.value })}
+                  placeholder="https://linkedin.com/sales/..."
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="notes">Notes</Label>
