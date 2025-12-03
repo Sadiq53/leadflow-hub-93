@@ -82,18 +82,30 @@ const TodayPanel = () => {
         const leadIds = Array.from(new Set(notifications.map((n) => n.lead_id).filter(Boolean)));
 
         const [{ data: pocsData }, { data: leadsData }] = await Promise.all([
-          supabase.from('pocs').select('id, name, linkedin_url, response_type, lead_id').in('id', pocIds),
+          supabase.from('pocs').select('id, name, linkedin_url, response_type, lead_id, invite_accepted_at, created_at').in('id', pocIds),
           supabase.from('leads').select('id, company_name').in('id', leadIds),
         ]);
 
         const pocMap = new Map((pocsData || []).map((p: any) => [p.id, p]));
         const leadMap = new Map((leadsData || []).map((l: any) => [l.id, l.company_name]));
 
+        const now = new Date();
         const formattedTasks = notifications
           .map((n: any) => {
             const poc = pocMap.get(n.poc_id);
-            // Exclude POCs with negative responses or already responded positively
+            // Exclude POCs with negative responses
             if (!poc || poc.response_type === 'negative') return null;
+            
+            // For follow-up tasks (not initial connection), check 24-hour rule
+            if (n.type !== 'send_connection') {
+              // If invite was accepted, check if 24 hours have passed
+              if (poc.invite_accepted_at) {
+                const acceptedAt = new Date(poc.invite_accepted_at);
+                const hoursSinceAccepted = (now.getTime() - acceptedAt.getTime()) / (1000 * 60 * 60);
+                if (hoursSinceAccepted < 24) return null; // Skip if less than 24 hours
+              }
+            }
+            
             return {
               id: n.id,
               poc_id: n.poc_id,
