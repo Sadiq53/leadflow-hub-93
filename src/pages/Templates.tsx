@@ -128,11 +128,25 @@ const Templates = () => {
   };
 
   const handleCopyTemplate = async (template: Template) => {
-    await navigator.clipboard.writeText(template.body);
-    toast({
-      title: "Copied!",
-      description: "Template copied to clipboard"
-    });
+    try {
+      await navigator.clipboard.writeText(template.body);
+      toast({
+        title: "Copied!",
+        description: "Template copied to clipboard"
+      });
+    } catch (error) {
+      // Fallback for browsers that don't support clipboard API
+      const textArea = document.createElement('textarea');
+      textArea.value = template.body;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      toast({
+        title: "Copied!",
+        description: "Template copied to clipboard"
+      });
+    }
   };
 
   const handleDeleteTemplate = async (id: string) => {

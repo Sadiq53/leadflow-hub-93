@@ -10,6 +10,7 @@ interface Template {
   is_shared: boolean;
   created_at: string;
   created_by: string;
+  followup_day?: number | null;
 }
 
 interface TemplateCardProps {
@@ -20,15 +21,28 @@ interface TemplateCardProps {
   onEdit: (template: Template) => void;
 }
 
+const getFollowupDayLabel = (day: number | null | undefined) => {
+  switch (day) {
+    case 1: return 'Day 1 - Connection';
+    case 2: return 'Day 2 - Follow-up';
+    case 3: return 'Day 3 - Final';
+    default: return null;
+  }
+};
+
 export const TemplateCard = ({ template, currentUserId, onCopy, onDelete, onEdit }: TemplateCardProps) => {
   const isOwner = template.created_by === currentUserId;
+  const followupLabel = getFollowupDayLabel(template.followup_day);
 
   return (
     <Card className="hover:shadow-md transition-shadow">
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span className="text-lg">{template.name}</span>
-          {template.is_shared && <Badge variant="secondary">Shared</Badge>}
+          <div className="flex gap-2">
+            {followupLabel && <Badge variant="default">{followupLabel}</Badge>}
+            {template.is_shared && <Badge variant="secondary">Shared</Badge>}
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>
