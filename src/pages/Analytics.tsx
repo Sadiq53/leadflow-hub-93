@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { TrendingUp, TrendingDown, Users, MessageSquare, Target, CheckCircle2, XCircle, MinusCircle, Clock, UserCheck } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from "recharts";
+import { format, subDays, startOfDay } from "date-fns";
 
 interface Stats {
   total_members: number;
@@ -19,8 +21,17 @@ interface Stats {
   avg_response_time_days: number;
 }
 
+interface TrendData {
+  date: string;
+  positive: number;
+  negative: number;
+  neutral: number;
+  total: number;
+}
+
 const Analytics = () => {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [trendData, setTrendData] = useState<TrendData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -64,6 +75,28 @@ const Analytics = () => {
         avg_response_time_days: avgResponseDays
       };
 
+      // Calculate trend data for last 30 days
+      const last30Days: TrendData[] = [];
+      for (let i = 29; i >= 0; i--) {
+        const date = startOfDay(subDays(new Date(), i));
+        const dateStr = format(date, 'yyyy-MM-dd');
+        const displayDate = format(date, 'MMM dd');
+        
+        const dayPocs = pocs.filter(p => {
+          const createdDate = startOfDay(new Date(p.created_at));
+          return createdDate <= date;
+        });
+        
+        last30Days.push({
+          date: displayDate,
+          positive: dayPocs.filter(p => p.response_type === 'positive').length,
+          negative: dayPocs.filter(p => p.response_type === 'negative').length,
+          neutral: dayPocs.filter(p => p.response_type === 'neutral').length,
+          total: dayPocs.filter(p => p.response_type && p.response_type !== 'no_response').length,
+        });
+      }
+
+      setTrendData(last30Days);
       setStats(stats);
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -196,6 +229,65 @@ const Analytics = () => {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Response Trends Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Response Trends (Last 30 Days)</CardTitle>
+                <CardDescription>Cumulative responses over time by type</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={trendData}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis 
+                        dataKey="date" 
+                        tick={{ fontSize: 12 }} 
+                        tickLine={false}
+                        interval="preserveStartEnd"
+                      />
+                      <YAxis tick={{ fontSize: 12 }} tickLine={false} />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px'
+                        }}
+                      />
+                      <Legend />
+                      <Area 
+                        type="monotone" 
+                        dataKey="positive" 
+                        stackId="1"
+                        stroke="hsl(142, 76%, 36%)" 
+                        fill="hsl(142, 76%, 36%)" 
+                        fillOpacity={0.6}
+                        name="Positive"
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="neutral" 
+                        stackId="1"
+                        stroke="hsl(48, 96%, 53%)" 
+                        fill="hsl(48, 96%, 53%)" 
+                        fillOpacity={0.6}
+                        name="Neutral"
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="negative" 
+                        stackId="1"
+                        stroke="hsl(0, 84%, 60%)" 
+                        fill="hsl(0, 84%, 60%)" 
+                        fillOpacity={0.6}
+                        name="Negative"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Funnel Stats */}
             <Card>
