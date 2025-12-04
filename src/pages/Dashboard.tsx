@@ -5,6 +5,7 @@ import RecentActivityEnhanced from "@/components/RecentActivityEnhanced";
 import AutoRemovalMonitor from "@/components/AutoRemovalMonitor";
 import NegativeResponsesList from "@/components/NegativeResponsesList";
 import QueueManagementDialog from "@/components/QueueManagementDialog";
+import ResponsePieChart from "@/components/ResponsePieChart";
 
 const Dashboard = () => {
   return (
@@ -20,15 +21,19 @@ const Dashboard = () => {
         
         <StatsOverview />
         
-        <div className="grid gap-6 md:grid-cols-2">
-          <TodayPanel />
-          <AutoRemovalMonitor />
+        <div className="grid gap-6 md:grid-cols-3">
+          <div className="md:col-span-2">
+            <TodayPanel />
+          </div>
+          <ResponsePieChart />
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          <RecentActivityEnhanced />
+          <AutoRemovalMonitor />
           <NegativeResponsesList />
         </div>
+
+        <RecentActivityEnhanced />
       </div>
     </Layout>
   );
