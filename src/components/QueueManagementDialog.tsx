@@ -30,6 +30,12 @@ const QueueManagementDialog = () => {
   const [editScheduledFor, setEditScheduledFor] = useState("");
   const { toast } = useToast();
 
+  // Fetch on mount to show correct badge count
+  useEffect(() => {
+    fetchQueuedMembers();
+  }, []);
+
+  // Refetch when dialog opens
   useEffect(() => {
     if (open) {
       fetchQueuedMembers();
