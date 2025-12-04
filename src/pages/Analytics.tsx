@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { TrendingUp, TrendingDown, Users, MessageSquare, Target, CheckCircle2, XCircle, MinusCircle, Clock, UserCheck } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area, PieChart, Pie, Cell } from "recharts";
 import { format, subDays, startOfDay } from "date-fns";
 
 interface Stats {
@@ -230,12 +230,61 @@ const Analytics = () => {
               </Card>
             </div>
 
-            {/* Response Trends Chart */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Response Trends (Last 30 Days)</CardTitle>
-                <CardDescription>Cumulative responses over time by type</CardDescription>
-              </CardHeader>
+            {/* Response Distribution Pie Chart */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Response Type Distribution</CardTitle>
+                  <CardDescription>Breakdown of all responses by type</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: 'Positive', value: stats.positive_responses, color: 'hsl(142, 76%, 36%)' },
+                            { name: 'Negative', value: stats.negative_responses, color: 'hsl(0, 84%, 60%)' },
+                            { name: 'Neutral', value: stats.neutral_responses, color: 'hsl(48, 96%, 53%)' },
+                            { name: 'No Response', value: stats.no_response, color: 'hsl(215, 16%, 47%)' },
+                          ]}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          outerRadius={100}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {[
+                            { name: 'Positive', value: stats.positive_responses, color: 'hsl(142, 76%, 36%)' },
+                            { name: 'Negative', value: stats.negative_responses, color: 'hsl(0, 84%, 60%)' },
+                            { name: 'Neutral', value: stats.neutral_responses, color: 'hsl(48, 96%, 53%)' },
+                            { name: 'No Response', value: stats.no_response, color: 'hsl(215, 16%, 47%)' },
+                          ].map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--card))', 
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px'
+                          }}
+                        />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Response Trends Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Response Trends (Last 30 Days)</CardTitle>
+                  <CardDescription>Cumulative responses over time</CardDescription>
+                </CardHeader>
               <CardContent>
                 <div className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
@@ -288,6 +337,7 @@ const Analytics = () => {
                 </div>
               </CardContent>
             </Card>
+            </div>
 
             {/* Funnel Stats */}
             <Card>

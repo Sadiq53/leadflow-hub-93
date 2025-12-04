@@ -161,12 +161,36 @@ const TodayPanel = () => {
         .replace(/{company}/g, task.company_name)
         .replace(/\{company\}/g, task.company_name);
 
-      // Copy to clipboard
-      await navigator.clipboard.writeText(finalMessage);
-      toast({
-        title: "Message copied!",
-        description: "The message has been copied to your clipboard."
-      });
+      // Copy to clipboard with fallback
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(finalMessage);
+        } else {
+          // Fallback for older browsers or non-secure contexts
+          const textArea = document.createElement('textarea');
+          textArea.value = finalMessage;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          textArea.style.top = '-999999px';
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          document.execCommand('copy');
+          textArea.remove();
+        }
+        toast({
+          title: "Message copied!",
+          description: "The message has been copied to your clipboard."
+        });
+      } catch (clipboardError) {
+        console.error('Clipboard error:', clipboardError);
+        // Show message in alert as last resort
+        toast({
+          title: "Copy manually",
+          description: finalMessage,
+          duration: 10000
+        });
+      }
 
       // Open LinkedIn
       if (task.linkedin_url) {
