@@ -99,7 +99,7 @@ const Members = () => {
         user_id: user.id,
         lead_id: member.lead_id,
         poc_id: member.id,
-        type: 'send_message_day_1',
+        type: 'followup_day_1',
         scheduled_for: day1.toISOString(),
         status: 'pending'
       },
@@ -107,7 +107,7 @@ const Members = () => {
         user_id: user.id,
         lead_id: member.lead_id,
         poc_id: member.id,
-        type: 'send_message_a',
+        type: 'followup_day_2',
         scheduled_for: day2.toISOString(),
         status: 'pending'
       },
@@ -115,7 +115,7 @@ const Members = () => {
         user_id: user.id,
         lead_id: member.lead_id,
         poc_id: member.id,
-        type: 'send_message_b',
+        type: 'followup_day_3',
         scheduled_for: day3.toISOString(),
         status: 'pending'
       }

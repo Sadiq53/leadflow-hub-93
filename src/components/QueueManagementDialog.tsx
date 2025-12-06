@@ -80,18 +80,20 @@ const QueueManagementDialog = () => {
           if (!poc.invite_accepted_at) continue;
 
           const inviteAcceptedAt = new Date(poc.invite_accepted_at);
-          const scheduledFor = new Date(n.scheduled_for);
           const queueExpiresAt = addDays(inviteAcceptedAt, 3);
           
           // Skip if queue has expired
           if (now > queueExpiresAt) continue;
 
-          // Calculate day based on scheduled time relative to acceptance
-          const msSinceAccepted = scheduledFor.getTime() - inviteAcceptedAt.getTime();
-          const daysSinceAccepted = Math.floor(msSinceAccepted / (1000 * 60 * 60 * 24));
-          let day = daysSinceAccepted + 1;
-          if (day < 1) day = 1;
-          if (day > 3) day = 3;
+          // Determine day from notification type
+          let day = 1;
+          if (n.type === 'followup_day_1' || n.type === 'send_message_day_1') {
+            day = 1;
+          } else if (n.type === 'followup_day_2' || n.type === 'send_message_a') {
+            day = 2;
+          } else if (n.type === 'followup_day_3' || n.type === 'send_message_b') {
+            day = 3;
+          }
 
           const hoursRemaining = Math.max(0, differenceInHours(queueExpiresAt, now));
           
@@ -140,9 +142,9 @@ const QueueManagementDialog = () => {
       newScheduledFor.setHours(editTime.getHours(), editTime.getMinutes(), 0, 0);
 
       // Update notification type based on day
-      let newType = 'send_message_day_1';
-      if (newDay === 2) newType = 'send_message_a';
-      if (newDay === 3) newType = 'send_message_b';
+      let newType = 'followup_day_1';
+      if (newDay === 2) newType = 'followup_day_2';
+      if (newDay === 3) newType = 'followup_day_3';
 
       const { error } = await supabase
         .from('notifications')
