@@ -58,7 +58,10 @@ const Templates = () => {
     const name = formData.get('name') as string;
     const body = formData.get('body') as string;
     const isShared = formData.get('is_shared') === 'on';
-    const followupDay = formData.get('followup_day') as string;
+    const followupDayRaw = formData.get('followup_day') as string;
+    
+    // Handle "none" or empty string as null
+    const followupDay = followupDayRaw && followupDayRaw !== 'none' ? parseInt(followupDayRaw) : null;
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -70,7 +73,7 @@ const Templates = () => {
           name, 
           body, 
           is_shared: isShared,
-          followup_day: followupDay ? parseInt(followupDay) : null
+          followup_day: followupDay
         })
         .eq('id', editingTemplate.id);
 
@@ -96,7 +99,7 @@ const Templates = () => {
           name,
           body,
           is_shared: isShared,
-          followup_day: followupDay ? parseInt(followupDay) : null,
+          followup_day: followupDay,
           created_by: user.id
         });
 

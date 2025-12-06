@@ -28,7 +28,8 @@ export const TemplateDialog = ({ isOpen, onClose, onSubmit, editingTemplate }: T
         <DialogHeader>
           <DialogTitle>{editingTemplate ? 'Edit Template' : 'Create Message Template'}</DialogTitle>
           <DialogDescription>
-            Use {'{'}firstName{'}'}, {'{'}company{'}'}, {'{'}title{'}'} as placeholders
+            Use {'{'}firstName{'}'}, {'{'}company{'}'}, {'{'}title{'}'} as placeholders. 
+            Assign a Follow-up Day to automatically use this template when messaging members on that day.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
@@ -37,10 +38,27 @@ export const TemplateDialog = ({ isOpen, onClose, onSubmit, editingTemplate }: T
             <Input 
               id="name" 
               name="name" 
-              placeholder="e.g., Initial Connection Request" 
+              placeholder="e.g., Day 1 - Initial Connection" 
               defaultValue={editingTemplate?.name}
               required 
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="followup_day">Follow-up Day Assignment</Label>
+            <Select name="followup_day" defaultValue={editingTemplate?.followup_day?.toString() || ""}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select which day to use this template..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Not assigned to a day</SelectItem>
+                <SelectItem value="1">Day 1 - First Follow-up (same day as acknowledgment)</SelectItem>
+                <SelectItem value="2">Day 2 - Second Follow-up (+1 day after acknowledgment)</SelectItem>
+                <SelectItem value="3">Day 3 - Third Follow-up (+2 days after acknowledgment)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              When you click "Send Message" in Today's Tasks, the system will automatically copy the template assigned to that member's follow-up day.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="body">Message Body</Label>
@@ -52,20 +70,6 @@ export const TemplateDialog = ({ isOpen, onClose, onSubmit, editingTemplate }: T
               defaultValue={editingTemplate?.body}
               required
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="followup_day">Follow-up Day (Optional)</Label>
-            <Select name="followup_day" defaultValue={editingTemplate?.followup_day?.toString() || ""}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select follow-up day..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Not specified</SelectItem>
-                <SelectItem value="1">Day 1 - Initial Connection</SelectItem>
-                <SelectItem value="2">Day 2 - First Follow-up</SelectItem>
-                <SelectItem value="3">Day 3 - Second Follow-up</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
           <div className="flex items-center space-x-2">
             <Switch 
