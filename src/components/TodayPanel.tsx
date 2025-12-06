@@ -101,14 +101,15 @@ const TodayPanel = () => {
           const inviteAcceptedAt = new Date(poc.invite_accepted_at);
           const scheduledFor = new Date(n.scheduled_for);
           
-          // Calculate which follow-up day this is based on the scheduled time relative to invite acceptance
-          const msSinceAccepted = scheduledFor.getTime() - inviteAcceptedAt.getTime();
-          const daysSinceAccepted = Math.floor(msSinceAccepted / (1000 * 60 * 60 * 24));
-          
-          // Day 1 = 0-1 days, Day 2 = 1-2 days, Day 3 = 2-3 days
-          let followupDay = daysSinceAccepted + 1;
-          if (followupDay < 1) followupDay = 1;
-          if (followupDay > 3) followupDay = 3;
+          // Determine follow-up day from notification type
+          let followupDay = 1;
+          if (n.type === 'followup_day_1' || n.type === 'send_message_day_1') {
+            followupDay = 1;
+          } else if (n.type === 'followup_day_2' || n.type === 'send_message_a') {
+            followupDay = 2;
+          } else if (n.type === 'followup_day_3' || n.type === 'send_message_b') {
+            followupDay = 3;
+          }
 
           // Check if the queue period (3 days from acknowledgment) includes today
           const queueEndTime = new Date(inviteAcceptedAt);
@@ -326,9 +327,9 @@ const TodayPanel = () => {
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {task.type === 'send_message_day_1' ? 'Initial Follow-up' :
-                   task.type === 'send_message_a' ? 'First Follow-up' :
-                   task.type === 'send_message_b' ? 'Second Follow-up' :
+                  {task.followup_day === 1 ? 'Day 1 Follow-up' :
+                   task.followup_day === 2 ? 'Day 2 Follow-up' :
+                   task.followup_day === 3 ? 'Day 3 Follow-up' :
                    task.type.replace(/_/g, ' ')}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
