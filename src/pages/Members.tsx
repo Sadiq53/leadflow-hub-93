@@ -79,17 +79,19 @@ const Members = () => {
     }
   };
 
-  const scheduleSequenceForPoc = async (member: Member) => {
+  const scheduleSequenceForPoc = async (member: Member, acknowledgedAt: Date) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const now = new Date();
-    // Day 2 - First follow-up (24 hours after invite acceptance)
-    const day2 = new Date(now);
+    // Schedule Day 1, Day 2, Day 3 based on the acknowledgment timestamp
+    // Day 1 = same timestamp (immediately available at that time)
+    // Day 2 = acknowledgment time + 1 day
+    // Day 3 = acknowledgment time + 2 days
+
+    const day1 = new Date(acknowledgedAt);
+    const day2 = new Date(acknowledgedAt);
     day2.setDate(day2.getDate() + 1);
-    
-    // Day 3 - Second follow-up (48 hours after invite acceptance)
-    const day3 = new Date(now);
+    const day3 = new Date(acknowledgedAt);
     day3.setDate(day3.getDate() + 2);
 
     const notifications = [
@@ -97,8 +99,16 @@ const Members = () => {
         user_id: user.id,
         lead_id: member.lead_id,
         poc_id: member.id,
+        type: 'send_message_day_1',
+        scheduled_for: day1.toISOString(),
+        status: 'pending'
+      },
+      {
+        user_id: user.id,
+        lead_id: member.lead_id,
+        poc_id: member.id,
         type: 'send_message_a',
-        scheduled_for: day2.toISOString(), // 24 hours later
+        scheduled_for: day2.toISOString(),
         status: 'pending'
       },
       {
@@ -106,33 +116,41 @@ const Members = () => {
         lead_id: member.lead_id,
         poc_id: member.id,
         type: 'send_message_b',
-        scheduled_for: day3.toISOString(), // 48 hours later
+        scheduled_for: day3.toISOString(),
         status: 'pending'
       }
     ];
+    
     await supabase.from('notifications').insert(notifications);
   };
 
   const handleToggleInvite = async (member: Member, accepted: boolean) => {
     try {
+      const acknowledgedAt = new Date();
+      
       await supabase
         .from('pocs')
         .update({ 
           linkedin_invite_accepted: accepted,
-          invite_accepted_at: accepted ? new Date().toISOString() : null
+          invite_accepted_at: accepted ? acknowledgedAt.toISOString() : null
         })
         .eq('id', member.id);
 
       if (accepted) {
-        await scheduleSequenceForPoc(member);
-        toast({ title: 'Invite acknowledged', description: 'Message sequence scheduled.' });
+        // Schedule all 3 days of follow-ups
+        await scheduleSequenceForPoc(member, acknowledgedAt);
+        toast({ 
+          title: 'Invite acknowledged', 
+          description: '3-day follow-up sequence scheduled. Tasks will appear at the acknowledgment time each day.' 
+        });
       } else {
+        // Cancel all pending notifications for this POC
         await supabase
           .from('notifications')
           .update({ status: 'cancelled' })
           .eq('poc_id', member.id)
           .eq('status', 'pending');
-        toast({ title: 'Invite unacknowledged', description: 'Pending messages cancelled for this contact.' });
+        toast({ title: 'Invite unacknowledged', description: 'All pending messages cancelled for this contact.' });
       }
 
       fetchMembers();
@@ -155,12 +173,53 @@ const Members = () => {
         })
         .eq('id', member.id);
 
-      // Cancel ALL pending notifications for this entire company (lead_id)
-      await supabase
-        .from('notifications')
-        .update({ status: 'cancelled' })
-        .eq('lead_id', member.lead_id)
-        .eq('status', 'pending');
+      // If negative response, remove ALL members from this lead from queue
+      if (responseType === 'negative') {
+        // Get all POCs from this lead
+        const { data: leadPocs } = await supabase
+          .from('pocs')
+          .select('id')
+          .eq('lead_id', member.lead_id);
+
+        if (leadPocs && leadPocs.length > 0) {
+          const pocIds = leadPocs.map(p => p.id);
+          
+          // Cancel ALL pending notifications for all POCs in this lead
+          await supabase
+            .from('notifications')
+            .update({ status: 'cancelled' })
+            .in('poc_id', pocIds)
+            .eq('status', 'pending');
+
+          // Mark all POCs from this lead as auto-removed
+          await supabase
+            .from('pocs')
+            .update({ 
+              auto_removed: true,
+              auto_removed_at: new Date().toISOString(),
+              auto_removed_reason: `Negative response from ${member.name}`
+            })
+            .in('id', pocIds)
+            .neq('id', member.id); // Don't auto-remove the one who responded
+        }
+
+        toast({ 
+          title: 'Negative response recorded', 
+          description: `All ${member.company_name} contacts removed from queue.` 
+        });
+      } else {
+        // For positive/neutral, just cancel this POC's pending notifications
+        await supabase
+          .from('notifications')
+          .update({ status: 'cancelled' })
+          .eq('poc_id', member.id)
+          .eq('status', 'pending');
+
+        toast({ 
+          title: 'Response acknowledged', 
+          description: `Marked as ${responseType}. Removed from follow-up queue.` 
+        });
+      }
 
       // Log the activity
       await supabase.from('activities').insert({
@@ -174,10 +233,6 @@ const Members = () => {
         }
       });
 
-      toast({ 
-        title: 'Response acknowledged', 
-        description: `Marked as ${responseType}. Removed all ${member.company_name} contacts from the queue.` 
-      });
       fetchMembers();
     } catch (e) {
       toast({ title: 'Error', description: 'Failed to acknowledge response.', variant: 'destructive' });
@@ -258,20 +313,27 @@ const Members = () => {
       let scheduledCount = 0;
 
       for (const member of selectedMembers) {
-        // Check if follow-up is allowed
-        const { data: isAllowed } = await supabase.rpc('is_followup_allowed', { 
-          poc_id_param: member.id 
-        });
-
-        if (isAllowed) {
-          await scheduleSequenceForPoc(member);
+        // Only schedule if not auto-removed and no negative response
+        if (!member.auto_removed && member.response_type !== 'negative') {
+          const acknowledgedAt = new Date();
+          await scheduleSequenceForPoc(member, acknowledgedAt);
+          
+          // Update POC with new invite acceptance time
+          await supabase
+            .from('pocs')
+            .update({ 
+              linkedin_invite_accepted: true,
+              invite_accepted_at: acknowledgedAt.toISOString()
+            })
+            .eq('id', member.id);
+          
           scheduledCount++;
         }
       }
 
       toast({ 
         title: 'Bulk follow-up scheduled', 
-        description: `Scheduled follow-ups for ${scheduledCount} member(s). ${selectedIds.size - scheduledCount} skipped (outside 2-day window or auto-removed).` 
+        description: `Scheduled follow-ups for ${scheduledCount} member(s). ${selectedIds.size - scheduledCount} skipped (auto-removed or negative response).` 
       });
       
       setSelectedIds(new Set());
@@ -298,15 +360,46 @@ const Members = () => {
         })
         .in('id', Array.from(selectedIds));
 
-      // Get unique lead_ids
-      const leadIds = [...new Set(selectedMembers.map(m => m.lead_id))];
+      if (responseType === 'negative') {
+        // Get unique lead_ids and remove ALL POCs from those leads
+        const leadIds = [...new Set(selectedMembers.map(m => m.lead_id))];
+        
+        for (const leadId of leadIds) {
+          const { data: leadPocs } = await supabase
+            .from('pocs')
+            .select('id')
+            .eq('lead_id', leadId);
 
-      // Cancel pending notifications for all affected leads
-      await supabase
-        .from('notifications')
-        .update({ status: 'cancelled' })
-        .in('lead_id', leadIds)
-        .eq('status', 'pending');
+          if (leadPocs && leadPocs.length > 0) {
+            const pocIds = leadPocs.map(p => p.id);
+            
+            // Cancel all pending notifications for entire lead
+            await supabase
+              .from('notifications')
+              .update({ status: 'cancelled' })
+              .in('poc_id', pocIds)
+              .eq('status', 'pending');
+
+            // Mark other POCs as auto-removed
+            await supabase
+              .from('pocs')
+              .update({ 
+                auto_removed: true,
+                auto_removed_at: new Date().toISOString(),
+                auto_removed_reason: 'Bulk negative response'
+              })
+              .in('id', pocIds)
+              .not('id', 'in', `(${Array.from(selectedIds).join(',')})`);
+          }
+        }
+      } else {
+        // For positive/neutral, just cancel selected POCs' notifications
+        await supabase
+          .from('notifications')
+          .update({ status: 'cancelled' })
+          .in('poc_id', Array.from(selectedIds))
+          .eq('status', 'pending');
+      }
 
       // Log activities
       for (const member of selectedMembers) {
@@ -325,7 +418,9 @@ const Members = () => {
 
       toast({ 
         title: 'Bulk status update complete', 
-        description: `Updated ${selectedIds.size} member(s) to ${responseType} status.` 
+        description: responseType === 'negative' 
+          ? `Updated ${selectedIds.size} member(s) and removed all related leads from queue.`
+          : `Updated ${selectedIds.size} member(s) to ${responseType} status.`
       });
       
       setSelectedIds(new Set());
@@ -493,18 +588,20 @@ const Members = () => {
                           </Badge>
                         ) : m.auto_removed ? (
                           <Badge variant="outline" className="inline-flex items-center">
-                            <AlertCircle className="h-3 w-3 mr-1" />Auto-Removed
+                            <AlertCircle className="h-3 w-3 mr-1" />
+                            Auto-removed
                           </Badge>
                         ) : (
-                          <Badge variant="outline">No Response</Badge>
+                          <span className="text-muted-foreground text-sm">No response</span>
                         )}
                       </TableCell>
                       <TableCell className="text-right">
                         {!m.response && !m.auto_removed && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button size="sm">
-                                <CheckCircle2 className="h-4 w-4 mr-2" /> Mark Response
+                              <Button size="sm" variant="outline">
+                                <CheckCircle2 className="h-4 w-4 mr-2" />
+                                Acknowledge
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent>
@@ -531,28 +628,29 @@ const Members = () => {
             )}
           </CardContent>
         </Card>
-      </div>
 
-      <AlertDialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {bulkAction === 'remove' && 'Confirm Bulk Removal'}
-              {bulkAction === 'followup' && 'Confirm Bulk Follow-up'}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {bulkAction === 'remove' && `You are about to remove ${selectedIds.size} member(s) from the queue. This will cancel all pending notifications for these members.`}
-              {bulkAction === 'followup' && `You are about to schedule follow-ups for ${selectedIds.size} member(s). Only members within the 2-day window will be scheduled.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={executeBulkAction}>
-              Confirm
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <AlertDialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {bulkAction === 'remove' ? 'Confirm Bulk Removal' : 'Confirm Bulk Follow-up'}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {bulkAction === 'remove' 
+                  ? `Are you sure you want to remove ${selectedIds.size} member(s) from the queue? This action cannot be undone.`
+                  : `This will schedule follow-up sequences for ${selectedIds.size} member(s). Continue?`
+                }
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={executeBulkAction}>
+                {bulkAction === 'remove' ? 'Remove' : 'Schedule'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
     </Layout>
   );
 };

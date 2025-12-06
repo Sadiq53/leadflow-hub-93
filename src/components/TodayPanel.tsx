@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, ExternalLink, CheckCircle2, Clock } from "lucide-react";
-import { format } from "date-fns";
+import { Copy, ExternalLink, CheckCircle2, Clock, Calendar } from "lucide-react";
+import { format, differenceInDays, differenceInMilliseconds } from "date-fns";
 
 interface TodayTask {
   id: string;
@@ -16,6 +16,8 @@ interface TodayTask {
   type: string;
   scheduled_for: string;
   lead_id: string;
+  invite_accepted_at: string;
+  followup_day: number; // 1, 2, or 3
 }
 
 const TodayPanel = () => {
@@ -63,18 +65,14 @@ const TodayPanel = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      const now = new Date();
 
+      // Fetch all pending notifications for the user
       const { data: notifications } = await supabase
         .from('notifications')
         .select('id, poc_id, lead_id, type, scheduled_for')
         .eq('user_id', user.id)
         .eq('status', 'pending')
-        .gte('scheduled_for', today.toISOString())
-        .lt('scheduled_for', tomorrow.toISOString())
         .order('scheduled_for', { ascending: true });
 
       if (notifications && notifications.length > 0) {
@@ -82,42 +80,66 @@ const TodayPanel = () => {
         const leadIds = Array.from(new Set(notifications.map((n) => n.lead_id).filter(Boolean)));
 
         const [{ data: pocsData }, { data: leadsData }] = await Promise.all([
-          supabase.from('pocs').select('id, name, linkedin_url, response_type, lead_id, invite_accepted_at, created_at').in('id', pocIds),
+          supabase.from('pocs').select('id, name, linkedin_url, response_type, lead_id, invite_accepted_at, auto_removed').in('id', pocIds),
           supabase.from('leads').select('id, company_name').in('id', leadIds),
         ]);
 
         const pocMap = new Map((pocsData || []).map((p: any) => [p.id, p]));
         const leadMap = new Map((leadsData || []).map((l: any) => [l.id, l.company_name]));
 
-        const now = new Date();
-        const formattedTasks = notifications
-          .map((n: any) => {
-            const poc = pocMap.get(n.poc_id);
-            // Exclude POCs with negative responses
-            if (!poc || poc.response_type === 'negative') return null;
-            
-            // For follow-up tasks (not initial connection), check 24-hour rule
-            if (n.type !== 'send_connection') {
-              // If invite was accepted, check if 24 hours have passed
-              if (poc.invite_accepted_at) {
-                const acceptedAt = new Date(poc.invite_accepted_at);
-                const hoursSinceAccepted = (now.getTime() - acceptedAt.getTime()) / (1000 * 60 * 60);
-                if (hoursSinceAccepted < 24) return null; // Skip if less than 24 hours
-              }
-            }
-            
-            return {
-              id: n.id,
-              poc_id: n.poc_id,
-              poc_name: poc.name,
-              company_name: leadMap.get(n.lead_id) || 'Unknown',
-              linkedin_url: poc.linkedin_url,
-              type: n.type,
-              scheduled_for: n.scheduled_for,
-              lead_id: n.lead_id,
-            } as TodayTask;
-          })
-          .filter(Boolean) as TodayTask[];
+        const formattedTasks: TodayTask[] = [];
+
+        for (const n of notifications) {
+          const poc = pocMap.get(n.poc_id);
+          
+          // Skip if POC not found, has negative response, or is auto-removed
+          if (!poc || poc.response_type === 'negative' || poc.auto_removed) continue;
+          
+          // POC must have invite_accepted_at to be in queue
+          if (!poc.invite_accepted_at) continue;
+
+          const inviteAcceptedAt = new Date(poc.invite_accepted_at);
+          const scheduledFor = new Date(n.scheduled_for);
+          
+          // Calculate which follow-up day this is based on the scheduled time relative to invite acceptance
+          const msSinceAccepted = scheduledFor.getTime() - inviteAcceptedAt.getTime();
+          const daysSinceAccepted = Math.floor(msSinceAccepted / (1000 * 60 * 60 * 24));
+          
+          // Day 1 = 0-1 days, Day 2 = 1-2 days, Day 3 = 2-3 days
+          let followupDay = daysSinceAccepted + 1;
+          if (followupDay < 1) followupDay = 1;
+          if (followupDay > 3) followupDay = 3;
+
+          // Check if the queue period (3 days from acknowledgment) includes today
+          const queueEndTime = new Date(inviteAcceptedAt);
+          queueEndTime.setDate(queueEndTime.getDate() + 3);
+          
+          if (now > queueEndTime) {
+            // Queue expired - skip this task
+            continue;
+          }
+
+          // Check if current time has passed the scheduled time for today
+          // The task should only appear when current time >= scheduled time
+          if (now < scheduledFor) {
+            // Not yet time for this task today
+            continue;
+          }
+
+          formattedTasks.push({
+            id: n.id,
+            poc_id: n.poc_id,
+            poc_name: poc.name,
+            company_name: leadMap.get(n.lead_id) || 'Unknown',
+            linkedin_url: poc.linkedin_url,
+            type: n.type,
+            scheduled_for: n.scheduled_for,
+            lead_id: n.lead_id,
+            invite_accepted_at: poc.invite_accepted_at,
+            followup_day: followupDay,
+          });
+        }
+
         setTasks(formattedTasks);
       } else {
         setTasks([]);
@@ -131,14 +153,11 @@ const TodayPanel = () => {
 
   const handleSendMessage = async (task: TodayTask) => {
     try {
-      // Fetch current user
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) return;
 
-      // Determine which day this is based on task type
-      let followupDay = 1;
-      if (task.type === 'send_message_a' || task.type.includes('follow_up_1')) followupDay = 2;
-      if (task.type === 'send_message_b' || task.type.includes('follow_up_2')) followupDay = 3;
+      // Use the calculated followup_day from the task
+      const followupDay = task.followup_day;
 
       // Fetch templates matching this followup day
       const { data: templates } = await supabase
@@ -151,7 +170,7 @@ const TodayPanel = () => {
       // Use first template or default message
       const templateBody = templates && templates.length > 0 
         ? templates[0].body 
-        : `Hi {firstName}, I wanted to reach out regarding {company}...`;
+        : `Hi {firstName}, I wanted to follow up on my previous message regarding {company}...`;
 
       // Replace placeholders
       const firstName = task.poc_name.split(' ')[0];
@@ -162,9 +181,11 @@ const TodayPanel = () => {
         .replace(/\{company\}/g, task.company_name);
 
       // Copy to clipboard with fallback
+      let copySuccess = false;
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
           await navigator.clipboard.writeText(finalMessage);
+          copySuccess = true;
         } else {
           // Fallback for older browsers or non-secure contexts
           const textArea = document.createElement('textarea');
@@ -175,16 +196,23 @@ const TodayPanel = () => {
           document.body.appendChild(textArea);
           textArea.focus();
           textArea.select();
-          document.execCommand('copy');
+          const success = document.execCommand('copy');
           textArea.remove();
+          copySuccess = success;
         }
-        toast({
-          title: "Message copied!",
-          description: "The message has been copied to your clipboard."
-        });
       } catch (clipboardError) {
         console.error('Clipboard error:', clipboardError);
-        // Show message in alert as last resort
+      }
+
+      if (copySuccess) {
+        toast({
+          title: `Day ${followupDay} message copied!`,
+          description: templates && templates.length > 0 
+            ? `Using template: ${templates[0].name}`
+            : "Using default template (no Day " + followupDay + " template found)"
+        });
+      } else {
+        // Show message in toast as last resort
         toast({
           title: "Copy manually",
           description: finalMessage,
@@ -205,23 +233,24 @@ const TodayPanel = () => {
         .update({ last_contacted_at: new Date().toISOString() })
         .eq('id', task.poc_id);
 
-      // Mark notification as sent
+      // Mark this notification as sent (removes from Today's Task)
       await supabase
         .from('notifications')
         .update({ status: 'sent', sent_at: new Date().toISOString() })
         .eq('id', task.id);
 
       // Log activity
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.from('activities').insert({
-          lead_id: task.lead_id,
-          poc_id: task.poc_id,
-          user_id: user.id,
-          action: 'message_sent',
-          metadata: { type: task.type, status: 'sent' }
-        });
-      }
+      await supabase.from('activities').insert({
+        lead_id: task.lead_id,
+        poc_id: task.poc_id,
+        user_id: currentUser.id,
+        action: 'message_sent',
+        metadata: { 
+          type: task.type, 
+          status: 'sent',
+          followup_day: followupDay
+        }
+      });
 
       fetchTodayTasks();
     } catch (error) {
@@ -248,6 +277,15 @@ const TodayPanel = () => {
     fetchTodayTasks();
   };
 
+  const getDayBadgeVariant = (day: number) => {
+    switch (day) {
+      case 1: return 'default';
+      case 2: return 'secondary';
+      case 3: return 'outline';
+      default: return 'default';
+    }
+  };
+
   if (loading) {
     return (
       <Card>
@@ -268,7 +306,7 @@ const TodayPanel = () => {
           <Badge variant="secondary">{tasks.length}</Badge>
         </CardTitle>
         <CardDescription>
-          {tasks.length === 0 ? "No tasks scheduled for today" : "People you need to reach out to today"}
+          {tasks.length === 0 ? "No tasks scheduled for now" : "People you need to reach out to today"}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -282,41 +320,40 @@ const TodayPanel = () => {
                 <div className="flex items-center space-x-2">
                   <h4 className="font-semibold">{task.poc_name}</h4>
                   <Badge variant="outline">{task.company_name}</Badge>
+                  <Badge variant={getDayBadgeVariant(task.followup_day)}>
+                    <Calendar className="h-3 w-3 mr-1" />
+                    Day {task.followup_day}
+                  </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {task.type.replace('_', ' ').charAt(0).toUpperCase() + task.type.slice(1).replace('_', ' ')}
+                  {task.type === 'send_message_day_1' ? 'Initial Follow-up' :
+                   task.type === 'send_message_a' ? 'First Follow-up' :
+                   task.type === 'send_message_b' ? 'Second Follow-up' :
+                   task.type.replace(/_/g, ' ')}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Scheduled: {format(new Date(task.scheduled_for), 'h:mm a')}
+                  Scheduled: {format(new Date(task.scheduled_for), 'MMM dd, h:mm a')}
                 </p>
               </div>
               
               <div className="flex items-center space-x-2">
-                {(() => {
-                  // Check if follow-up is allowed (within 2 days of invite acceptance)
-                  const canSendFollowup = task.type.includes('message') || task.type.includes('follow');
-                  return (
-                    <>
-                      <Button
-                        onClick={() => handleSendMessage(task)}
-                        className="flex items-center space-x-2"
-                        disabled={!canSendFollowup}
-                      >
-                        <Copy className="h-4 w-4" />
-                        <span>Send Message</span>
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
-                      
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => handleMarkComplete(task.id)}
-                      >
-                        <CheckCircle2 className="h-4 w-4" />
-                      </Button>
-                    </>
-                  );
-                })()}
+                <Button
+                  onClick={() => handleSendMessage(task)}
+                  className="flex items-center space-x-2"
+                >
+                  <Copy className="h-4 w-4" />
+                  <span>Send Day {task.followup_day}</span>
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => handleMarkComplete(task.id)}
+                  title="Mark as complete without sending"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           ))}
