@@ -2,62 +2,36 @@ import { ReactNode, useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { LogOut, Users, LayoutDashboard, ClipboardList, MessageSquare, Bell, UserCheck, Activity, Settings } from "lucide-react";
-import { signOut, checkUserRole } from "@/lib/auth";
-import { supabase } from "@/integrations/supabase/client";
+import { signOut } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
-import Logo from '../assets/logo.jpg'
+import { useAuth } from "@/hooks/useAuth";
+import { useNotificationCount } from "@/hooks/useNotifications";
+import { FullPageLoader } from "@/components/LoadingSpinner";
 
 interface LayoutProps {
   children: ReactNode;
+  requireAdmin?: boolean;
 }
 
-const Layout = ({ children }: LayoutProps) => {
+const Layout = ({ children, requireAdmin = false }: LayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [userName, setUserName] = useState("");
-  const [notificationCount, setNotificationCount] = useState(0);
+  const { user, isAdmin, loading, profile } = useAuth();
+  const { data: notificationCount = 0 } = useNotificationCount();
 
+  // Server-side admin check - redirect if admin required but user is not admin
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        navigate("/auth");
-        return;
-      }
-
-      const adminStatus = await checkUserRole(session.user.id);
-      setIsAdmin(adminStatus);
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('name')
-        .eq('id', session.user.id)
-        .single();
-      
-      if (profile) {
-        setUserName(profile.name);
-      }
-
-      // Get notification count
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const { count } = await supabase
-        .from('notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', session.user.id)
-        .eq('status', 'pending')
-        .lte('scheduled_for', new Date().toISOString());
-      
-      setNotificationCount(count || 0);
-    };
-
-    checkAuth();
-  }, [navigate]);
+    if (!loading && requireAdmin && !isAdmin) {
+      toast({
+        title: "Access Denied",
+        description: "You don't have permission to access this page.",
+        variant: "destructive"
+      });
+      navigate("/dashboard");
+    }
+  }, [loading, requireAdmin, isAdmin, navigate, toast]);
 
   const handleLogout = async () => {
     await signOut();
@@ -70,6 +44,15 @@ const Layout = ({ children }: LayoutProps) => {
 
   const isActive = (path: string) => location.pathname === path;
 
+  if (loading) {
+    return <FullPageLoader text="Loading..." />;
+  }
+
+  // Block rendering if admin required but user is not admin
+  if (requireAdmin && !isAdmin) {
+    return <FullPageLoader text="Checking permissions..." />;
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <nav className="border-b bg-card py-2">
@@ -77,7 +60,6 @@ const Layout = ({ children }: LayoutProps) => {
           <div className="flex justify-between h-16">
             <div className="flex items-center space-x-8">
               <Link to="/dashboard" className="flex items-center space-x-2">
-                {/* <img src={Logo} className=" w-[15rem]" /> */}
                 <div className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
                   Crewvia
                 </div>
@@ -172,7 +154,8 @@ const Layout = ({ children }: LayoutProps) => {
               
               <div className="hidden md:flex items-center space-x-2 text-sm">
                 <span className="text-muted-foreground">Welcome,</span>
-                <span className="font-medium">{userName}</span>
+                <span className="font-medium">{profile?.name || 'User'}</span>
+                {isAdmin && <Badge variant="outline" className="text-xs">Admin</Badge>}
               </div>
               
               <Button variant="outline" onClick={handleLogout} className="flex items-center space-x-2">
