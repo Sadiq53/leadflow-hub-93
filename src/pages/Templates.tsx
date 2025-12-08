@@ -1,56 +1,26 @@
-import { useEffect, useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { useTemplates, Template } from "@/hooks/useTemplates";
 import { TemplateCard } from "@/components/templates/TemplateCard";
 import { TemplateDialog } from "@/components/templates/TemplateDialog";
 import { TemplateFilters } from "@/components/templates/TemplateFilters";
-
-interface Template {
-  id: string;
-  name: string;
-  body: string;
-  is_shared: boolean;
-  created_at: string;
-  created_by: string;
-  followup_day?: number | null;
-}
+import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { EmptyState } from "@/components/EmptyState";
+import { useAuth } from "@/hooks/useAuth";
 
 const Templates = () => {
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const { user } = useAuth();
+  const { templates, isLoading, createTemplate, updateTemplate, deleteTemplate, copyTemplate, isCreating, isUpdating } = useTemplates();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("newest");
   const [filterBy, setFilterBy] = useState("all");
-  const [currentUserId, setCurrentUserId] = useState<string>("");
-  const { toast } = useToast();
 
-  useEffect(() => {
-    fetchTemplates();
-    getCurrentUser();
-  }, []);
-
-  const getCurrentUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) setCurrentUserId(user.id);
-  };
-
-  const fetchTemplates = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data } = await supabase
-      .from('templates')
-      .select('*')
-      .or(`created_by.eq.${user.id},is_shared.eq.true`)
-      .order('created_at', { ascending: false });
-
-    if (data) setTemplates(data);
-  };
+  const currentUserId = user?.id || "";
 
   const handleSubmitTemplate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -59,65 +29,16 @@ const Templates = () => {
     const body = formData.get('body') as string;
     const isShared = formData.get('is_shared') === 'on';
     const followupDayRaw = formData.get('followup_day') as string;
-    
-    // Handle "none" or empty string as null
     const followupDay = followupDayRaw && followupDayRaw !== 'none' ? parseInt(followupDayRaw) : null;
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
     if (editingTemplate) {
-      const { error } = await supabase
-        .from('templates')
-        .update({ 
-          name, 
-          body, 
-          is_shared: isShared,
-          followup_day: followupDay
-        })
-        .eq('id', editingTemplate.id);
-
-      if (error) {
-        toast({
-          title: "Error",
-          description: "Failed to update template",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Success",
-          description: "Template updated successfully"
-        });
-        setIsDialogOpen(false);
-        setEditingTemplate(null);
-        fetchTemplates();
-      }
+      updateTemplate({ id: editingTemplate.id, name, body, is_shared: isShared, followup_day: followupDay });
     } else {
-      const { error } = await supabase
-        .from('templates')
-        .insert({
-          name,
-          body,
-          is_shared: isShared,
-          followup_day: followupDay,
-          created_by: user.id
-        });
-
-      if (error) {
-        toast({
-          title: "Error",
-          description: "Failed to create template",
-          variant: "destructive"
-        });
-      } else {
-        toast({
-          title: "Success",
-          description: "Template created successfully"
-        });
-        setIsDialogOpen(false);
-        fetchTemplates();
-      }
+      createTemplate({ name, body, is_shared: isShared, followup_day: followupDay });
     }
+    
+    setIsDialogOpen(false);
+    setEditingTemplate(null);
   };
 
   const handleEditTemplate = (template: Template) => {
@@ -130,62 +51,20 @@ const Templates = () => {
     setEditingTemplate(null);
   };
 
-  const handleCopyTemplate = async (template: Template) => {
-    try {
-      await navigator.clipboard.writeText(template.body);
-      toast({
-        title: "Copied!",
-        description: "Template copied to clipboard"
-      });
-    } catch (error) {
-      // Fallback for browsers that don't support clipboard API
-      const textArea = document.createElement('textarea');
-      textArea.value = template.body;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      toast({
-        title: "Copied!",
-        description: "Template copied to clipboard"
-      });
-    }
-  };
-
   const handleDeleteTemplate = async (id: string) => {
     if (!confirm("Are you sure you want to delete this template?")) return;
-
-    const { error } = await supabase
-      .from('templates')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to delete template",
-        variant: "destructive"
-      });
-    } else {
-      toast({
-        title: "Success",
-        description: "Template deleted"
-      });
-      fetchTemplates();
-    }
+    deleteTemplate(id);
   };
 
   const filteredAndSortedTemplates = useMemo(() => {
     let filtered = templates;
 
-    // Filter by ownership
     if (filterBy === "mine") {
       filtered = filtered.filter(t => t.created_by === currentUserId);
     } else if (filterBy === "shared") {
       filtered = filtered.filter(t => t.is_shared);
     }
 
-    // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -194,7 +73,6 @@ const Templates = () => {
       );
     }
 
-    // Sort
     const sorted = [...filtered];
     if (sortBy === "newest") {
       sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -232,29 +110,38 @@ const Templates = () => {
           onFilterChange={setFilterBy}
         />
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredAndSortedTemplates.map((template) => (
-            <TemplateCard
-              key={template.id}
-              template={template}
-              currentUserId={currentUserId}
-              onCopy={handleCopyTemplate}
-              onDelete={handleDeleteTemplate}
-              onEdit={handleEditTemplate}
-            />
-          ))}
-        </div>
-
-        {filteredAndSortedTemplates.length === 0 && (
+        {isLoading ? (
           <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">
-                {searchQuery || filterBy !== "all"
-                  ? "No templates match your filters."
-                  : "No templates yet. Create your first template to get started!"}
-              </p>
+            <CardContent className="py-12">
+              <LoadingSpinner text="Loading templates..." />
             </CardContent>
           </Card>
+        ) : filteredAndSortedTemplates.length === 0 ? (
+          <Card>
+            <CardContent className="py-12">
+              <EmptyState
+                title={searchQuery || filterBy !== "all" ? "No templates match your filters" : "No templates yet"}
+                description={searchQuery || filterBy !== "all" ? "Try adjusting your search or filters." : "Create your first template to get started!"}
+                action={!searchQuery && filterBy === "all" ? {
+                  label: "Create Template",
+                  onClick: () => setIsDialogOpen(true)
+                } : undefined}
+              />
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filteredAndSortedTemplates.map((template) => (
+              <TemplateCard
+                key={template.id}
+                template={template}
+                currentUserId={currentUserId}
+                onCopy={copyTemplate}
+                onDelete={handleDeleteTemplate}
+                onEdit={handleEditTemplate}
+              />
+            ))}
+          </div>
         )}
 
         <TemplateDialog

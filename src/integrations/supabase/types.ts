@@ -333,6 +333,10 @@ export type Database = {
         Returns: boolean
       }
       is_followup_allowed: { Args: { poc_id_param: string }; Returns: boolean }
+      owns_lead: {
+        Args: { _lead_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "user"
