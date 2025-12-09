@@ -2,59 +2,132 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { Suspense, lazy } from "react";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import Auth from "./pages/Auth";
-import Dashboard from "./pages/Dashboard";
-import Leads from "./pages/Leads";
-import NewLead from "./pages/NewLead";
-import LeadDetail from "./pages/LeadDetail";
-import Templates from "./pages/Templates";
-import Members from "./pages/Members";
-import Analytics from "./pages/Analytics";
-import SystemHealth from "./pages/SystemHealth";
-import DevTools from "./pages/DevTools";
-import NotFound from "./pages/NotFound";
+import LoadingSpinner from "@/components/LoadingSpinner";
+import ProtectedRoute from "@/components/ProtectedRoute";
+
+// Lazy load pages for better performance
+const Index = lazy(() => import("./pages/Index"));
+const Auth = lazy(() => import("./pages/Auth"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Leads = lazy(() => import("./pages/Leads"));
+const NewLead = lazy(() => import("./pages/NewLead"));
+const LeadDetail = lazy(() => import("./pages/LeadDetail"));
+const Members = lazy(() => import("./pages/Members"));
+const Templates = lazy(() => import("./pages/Templates"));
+const Analytics = lazy(() => import("./pages/Analytics"));
+const DevTools = lazy(() => import("./pages/DevTools"));
+const SystemHealth = lazy(() => import("./pages/SystemHealth"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 2,
-      staleTime: 30000,
-      refetchOnWindowFocus: true,
-    },
-    mutations: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
       retry: 1,
+      refetchOnWindowFocus: false,
     },
   },
 });
 
+const PageLoader = () => (
+  <div className="flex min-h-screen items-center justify-center bg-background">
+    <LoadingSpinner size="lg" text="Loading page..." />
+  </div>
+);
+
 const App = () => (
-  <ErrorBoundary>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/leads" element={<Leads />} />
-            <Route path="/leads/new" element={<NewLead />} />
-            <Route path="/leads/:id" element={<LeadDetail />} />
-            <Route path="/templates" element={<Templates />} />
-            <Route path="/members" element={<Members />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/system-health" element={<SystemHealth />} />
-            <Route path="/dev-tools" element={<DevTools />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
-  </ErrorBoundary>
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter>
+        <ErrorBoundary>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/" element={<Index />} />
+              <Route path="/auth" element={<Auth />} />
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/leads"
+                element={
+                  <ProtectedRoute>
+                    <Leads />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/leads/new"
+                element={
+                  <ProtectedRoute>
+                    <NewLead />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/leads/:id"
+                element={
+                  <ProtectedRoute>
+                    <LeadDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/members"
+                element={
+                  <ProtectedRoute>
+                    <Members />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/templates"
+                element={
+                  <ProtectedRoute>
+                    <Templates />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/analytics"
+                element={
+                  <ProtectedRoute>
+                    <Analytics />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dev-tools"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <DevTools />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/system-health"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <SystemHealth />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
+      </BrowserRouter>
+    </TooltipProvider>
+  </QueryClientProvider>
 );
 
 export default App;
