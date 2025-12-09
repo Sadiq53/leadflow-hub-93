@@ -1,13 +1,16 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, Users, LayoutDashboard, ClipboardList, MessageSquare, Bell, UserCheck, Activity, Settings } from "lucide-react";
+import { LogOut, Users, LayoutDashboard, ClipboardList, MessageSquare, Bell, UserCheck, Activity, Settings, BarChart3, Keyboard } from "lucide-react";
 import { signOut } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotificationCount } from "@/hooks/useNotifications";
 import { FullPageLoader } from "@/components/LoadingSpinner";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import KeyboardShortcutsDialog from "@/components/KeyboardShortcutsDialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface LayoutProps {
   children: ReactNode;
@@ -20,6 +23,9 @@ const Layout = ({ children, requireAdmin = false }: LayoutProps) => {
   const { toast } = useToast();
   const { user, isAdmin, loading, profile } = useAuth();
   const { data: notificationCount = 0 } = useNotificationCount();
+  
+  // Initialize keyboard shortcuts
+  useKeyboardShortcuts();
 
   // Server-side admin check - redirect if admin required but user is not admin
   useEffect(() => {
@@ -106,6 +112,16 @@ const Layout = ({ children, requireAdmin = false }: LayoutProps) => {
                   </Button>
                 </Link>
                 
+                <Link to="/analytics">
+                  <Button
+                    variant={isActive("/analytics") ? "default" : "ghost"}
+                    className="flex items-center space-x-2"
+                  >
+                    <BarChart3 className="h-4 w-4" />
+                    <span>Analytics</span>
+                  </Button>
+                </Link>
+                
                 {isAdmin && (
                   <>
                     <Link to="/system-health">
@@ -143,14 +159,28 @@ const Layout = ({ children, requireAdmin = false }: LayoutProps) => {
             </div>
             
             <div className="flex items-center space-x-4">
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-5 w-5" />
-                {notificationCount > 0 && (
-                  <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
-                    {notificationCount}
-                  </Badge>
-                )}
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="relative">
+                    <Bell className="h-5 w-5" />
+                    {notificationCount > 0 && (
+                      <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
+                        {notificationCount}
+                      </Badge>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Pending Tasks</TooltipContent>
+              </Tooltip>
+              
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <Keyboard className="h-5 w-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Press ? for shortcuts</TooltipContent>
+              </Tooltip>
               
               <div className="hidden md:flex items-center space-x-2 text-sm">
                 <span className="text-muted-foreground">Welcome,</span>
@@ -170,6 +200,8 @@ const Layout = ({ children, requireAdmin = false }: LayoutProps) => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
+      
+      <KeyboardShortcutsDialog />
     </div>
   );
 };
