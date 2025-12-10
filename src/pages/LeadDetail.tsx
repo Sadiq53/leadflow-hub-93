@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -9,10 +9,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Building2, Globe, Tag, User, Mail, Linkedin, Clock, Edit, Trash2, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Building2, Globe, Tag, User, Mail, Linkedin, Clock, Edit, Trash2, CheckCircle2, Plus, Keyboard, Save } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { Kbd } from "@/components/ui/kbd";
 
 interface POC {
   id: string;
@@ -71,6 +72,65 @@ const LeadDetail = () => {
     notes: ""
   });
 
+  // POC editing state
+  const [editPocDialogOpen, setEditPocDialogOpen] = useState(false);
+  const [addPocDialogOpen, setAddPocDialogOpen] = useState(false);
+  const [deletePocDialogOpen, setDeletePocDialogOpen] = useState(false);
+  const [selectedPoc, setSelectedPoc] = useState<POC | null>(null);
+  const [pocForm, setPocForm] = useState({
+    name: "",
+    email: "",
+    linkedin_url: "",
+    title: ""
+  });
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInputActive = target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+
+      // Alt+E: Edit Lead
+      if (e.altKey && e.key.toLowerCase() === "e" && !isInputActive) {
+        e.preventDefault();
+        setEditDialogOpen(true);
+        return;
+      }
+
+      // Alt+P: Add new POC
+      if (e.altKey && e.key.toLowerCase() === "p" && !isInputActive) {
+        e.preventDefault();
+        openAddPocDialog();
+        return;
+      }
+
+      // Ctrl+S: Save (submit open dialog)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (editDialogOpen) handleEditLead();
+        if (editPocDialogOpen) handleEditPoc();
+        if (addPocDialogOpen) handleAddPoc();
+        return;
+      }
+
+      // Escape: Close dialogs or go back
+      if (e.key === "Escape" && !isInputActive) {
+        if (editDialogOpen || editPocDialogOpen || addPocDialogOpen || deletePocDialogOpen || deleteDialogOpen) {
+          setEditDialogOpen(false);
+          setEditPocDialogOpen(false);
+          setAddPocDialogOpen(false);
+          setDeletePocDialogOpen(false);
+          setDeleteDialogOpen(false);
+        } else {
+          navigate("/leads");
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editDialogOpen, editPocDialogOpen, addPocDialogOpen, deletePocDialogOpen, deleteDialogOpen]);
+
   useEffect(() => {
     if (id) {
       fetchLeadDetails(id);
@@ -100,7 +160,6 @@ const LeadDetail = () => {
       ]);
 
       if (leadData) {
-        // Fetch creator profile name separately (no FK configured)
         let creatorName = 'Unknown';
         if ((leadData as any).created_by) {
           const { data: profile } = await supabase
@@ -123,7 +182,6 @@ const LeadDetail = () => {
       }
       if (pocsResult.data) setPocs(pocsResult.data);
       
-      // Fetch user names for activities
       if (activitiesResult.data) {
         const userIds = Array.from(new Set(activitiesResult.data.map((a: any) => a.user_id).filter(Boolean)));
         let userMap: Record<string, string> = {};
@@ -157,7 +215,6 @@ const LeadDetail = () => {
         .eq('id', pocId);
 
       if (hasResponse) {
-        // Cancel all pending notifications for this lead
         const { data: { user } } = await supabase.auth.getUser();
         if (user && id) {
           await supabase
@@ -228,6 +285,131 @@ const LeadDetail = () => {
     }
   };
 
+  // POC CRUD Operations
+  const openEditPocDialog = (poc: POC) => {
+    setSelectedPoc(poc);
+    setPocForm({
+      name: poc.name,
+      email: poc.email || "",
+      linkedin_url: poc.linkedin_url || "",
+      title: poc.title || ""
+    });
+    setEditPocDialogOpen(true);
+  };
+
+  const openAddPocDialog = () => {
+    setPocForm({ name: "", email: "", linkedin_url: "", title: "" });
+    setAddPocDialogOpen(true);
+  };
+
+  const openDeletePocDialog = (poc: POC) => {
+    setSelectedPoc(poc);
+    setDeletePocDialogOpen(true);
+  };
+
+  const handleEditPoc = async () => {
+    if (!selectedPoc) return;
+    try {
+      await supabase
+        .from('pocs')
+        .update({
+          name: pocForm.name,
+          email: pocForm.email || null,
+          linkedin_url: pocForm.linkedin_url || null,
+          title: pocForm.title || null
+        })
+        .eq('id', selectedPoc.id);
+
+      toast({
+        title: "Contact updated",
+        description: `${pocForm.name} has been updated successfully.`
+      });
+
+      setEditPocDialogOpen(false);
+      setSelectedPoc(null);
+      fetchLeadDetails(id!);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update contact.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleAddPoc = async () => {
+    if (!pocForm.name.trim()) {
+      toast({
+        title: "Error",
+        description: "Name is required.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await supabase
+        .from('pocs')
+        .insert({
+          lead_id: id,
+          name: pocForm.name,
+          email: pocForm.email || null,
+          linkedin_url: pocForm.linkedin_url || null,
+          title: pocForm.title || null
+        });
+
+      // Log activity
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("activities").insert({
+          lead_id: id,
+          user_id: user.id,
+          action: "poc_added",
+          payload: { name: pocForm.name }
+        });
+      }
+
+      toast({
+        title: "Contact added",
+        description: `${pocForm.name} has been added to this lead.`
+      });
+
+      setAddPocDialogOpen(false);
+      fetchLeadDetails(id!);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add contact.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDeletePoc = async () => {
+    if (!selectedPoc) return;
+    try {
+      await supabase
+        .from('pocs')
+        .delete()
+        .eq('id', selectedPoc.id);
+
+      toast({
+        title: "Contact deleted",
+        description: `${selectedPoc.name} has been removed.`
+      });
+
+      setDeletePocDialogOpen(false);
+      setSelectedPoc(null);
+      fetchLeadDetails(id!);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete contact.",
+        variant: "destructive"
+      });
+    }
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -260,6 +442,12 @@ const LeadDetail = () => {
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            <div className="hidden md:flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-lg mr-2">
+              <Keyboard className="h-3.5 w-3.5" />
+              <Kbd>Alt</Kbd>+<Kbd>E</Kbd> Edit
+              <span className="text-muted-foreground/50">|</span>
+              <Kbd>Alt</Kbd>+<Kbd>P</Kbd> Add POC
+            </div>
             <Button variant="outline" onClick={() => setEditDialogOpen(true)}>
               <Edit className="h-4 w-4 mr-2" />
               Edit
@@ -329,86 +517,113 @@ const LeadDetail = () => {
 
             <Card>
               <CardHeader>
-                <CardTitle>Points of Contact ({pocs.length})</CardTitle>
-                <CardDescription>People at this company</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Points of Contact ({pocs.length})</CardTitle>
+                    <CardDescription>People at this company</CardDescription>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={openAddPocDialog}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add POC
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {pocs.map((poc) => (
-                  <div key={poc.id} className="border rounded-lg p-4 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h4 className="font-semibold flex items-center space-x-2">
-                          <User className="h-4 w-4" />
-                          <span>{poc.name}</span>
-                          {poc.response && (
-                            <Badge variant="default" className="ml-2">
-                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Responded
-                            </Badge>
+                {pocs.length === 0 ? (
+                  <p className="text-muted-foreground text-center py-4">No contacts added yet</p>
+                ) : (
+                  pocs.map((poc) => (
+                    <div key={poc.id} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="font-semibold flex items-center space-x-2">
+                            <User className="h-4 w-4" />
+                            <span>{poc.name}</span>
+                            {poc.response && (
+                              <Badge variant="default" className="ml-2">
+                                <CheckCircle2 className="h-3 w-3 mr-1" />
+                                Responded
+                              </Badge>
+                            )}
+                          </h4>
+                          {poc.title && <p className="text-sm text-muted-foreground">{poc.title}</p>}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openEditPocDialog(poc)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => openDeletePocDialog(poc)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                          {poc.response ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleMarkResponse(poc.id, false)}
+                            >
+                              Clear Response
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              onClick={() => handleMarkResponse(poc.id, true)}
+                            >
+                              <CheckCircle2 className="h-4 w-4 mr-1" />
+                              Mark Responded
+                            </Button>
                           )}
-                        </h4>
-                        {poc.title && <p className="text-sm text-muted-foreground">{poc.title}</p>}
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        {poc.response ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleMarkResponse(poc.id, false)}
+                      
+                      <div className="flex flex-wrap gap-2">
+                        {poc.email && (
+                          <a href={`mailto:${poc.email}`} className="text-sm flex items-center space-x-1 text-primary hover:underline">
+                            <Mail className="h-3 w-3" />
+                            <span>{poc.email}</span>
+                          </a>
+                        )}
+                        {poc.linkedin_url && (
+                          <a
+                            href={poc.linkedin_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm flex items-center space-x-1 text-primary hover:underline"
                           >
-                            Clear Response
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            onClick={() => handleMarkResponse(poc.id, true)}
-                          >
-                            <CheckCircle2 className="h-4 w-4 mr-1" />
-                            Mark Responded
-                          </Button>
+                            <Linkedin className="h-3 w-3" />
+                            <span>LinkedIn</span>
+                          </a>
                         )}
                       </div>
-                    </div>
-                    
-                    <div className="flex flex-wrap gap-2">
-                      {poc.email && (
-                        <a href={`mailto:${poc.email}`} className="text-sm flex items-center space-x-1 text-primary hover:underline">
-                          <Mail className="h-3 w-3" />
-                          <span>{poc.email}</span>
-                        </a>
-                      )}
-                      {poc.linkedin_url && (
-                        <a
-                          href={poc.linkedin_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm flex items-center space-x-1 text-primary hover:underline"
-                        >
-                          <Linkedin className="h-3 w-3" />
-                          <span>LinkedIn</span>
-                        </a>
-                      )}
-                    </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant={poc.outreach_day_1_status === 'not_contacted' ? 'outline' : 'default'}>
-                        Day 1: {poc.outreach_day_1_status.replace('_', ' ')}
-                      </Badge>
-                      <Badge variant={poc.outreach_day_2_status === 'not_contacted' ? 'outline' : 'default'}>
-                        Day 2: {poc.outreach_day_2_status.replace('_', ' ')}
-                      </Badge>
-                      <Badge variant={poc.outreach_day_3_status === 'not_contacted' ? 'outline' : 'default'}>
-                        Day 3: {poc.outreach_day_3_status.replace('_', ' ')}
-                      </Badge>
-                    </div>
-
-                    {poc.response && (
-                      <div className="bg-muted/50 p-2 rounded text-sm">
-                        <strong>Response:</strong> {poc.response}
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant={poc.outreach_day_1_status === 'not_contacted' ? 'outline' : 'default'}>
+                          Day 1: {poc.outreach_day_1_status.replace('_', ' ')}
+                        </Badge>
+                        <Badge variant={poc.outreach_day_2_status === 'not_contacted' ? 'outline' : 'default'}>
+                          Day 2: {poc.outreach_day_2_status.replace('_', ' ')}
+                        </Badge>
+                        <Badge variant={poc.outreach_day_3_status === 'not_contacted' ? 'outline' : 'default'}>
+                          Day 3: {poc.outreach_day_3_status.replace('_', ' ')}
+                        </Badge>
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {poc.response && (
+                        <div className="bg-muted/50 p-2 rounded text-sm">
+                          <strong>Response:</strong> {poc.response}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
               </CardContent>
             </Card>
           </div>
@@ -446,12 +661,15 @@ const LeadDetail = () => {
           </div>
         </div>
 
-        {/* Edit Dialog */}
+        {/* Edit Lead Dialog */}
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
           <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
               <DialogTitle>Edit Lead</DialogTitle>
-              <DialogDescription>Update the lead information</DialogDescription>
+              <DialogDescription>
+                Update the lead information
+                <span className="ml-2 text-xs">(<Kbd>Ctrl</Kbd>+<Kbd>S</Kbd> to save)</span>
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
@@ -512,12 +730,15 @@ const LeadDetail = () => {
               <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleEditLead}>Save Changes</Button>
+              <Button onClick={handleEditLead}>
+                <Save className="h-4 w-4 mr-2" />
+                Save Changes
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Delete Confirmation Dialog */}
+        {/* Delete Lead Confirmation Dialog */}
         <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -532,6 +753,146 @@ const LeadDetail = () => {
               </Button>
               <Button variant="destructive" onClick={handleDeleteLead}>
                 Delete Lead
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit POC Dialog */}
+        <Dialog open={editPocDialogOpen} onOpenChange={setEditPocDialogOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Edit Contact</DialogTitle>
+              <DialogDescription>
+                Update contact information
+                <span className="ml-2 text-xs">(<Kbd>Ctrl</Kbd>+<Kbd>S</Kbd> to save)</span>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="poc_name">Name *</Label>
+                <Input
+                  id="poc_name"
+                  value={pocForm.name}
+                  onChange={(e) => setPocForm({ ...pocForm, name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="poc_email">Email</Label>
+                <Input
+                  id="poc_email"
+                  type="email"
+                  value={pocForm.email}
+                  onChange={(e) => setPocForm({ ...pocForm, email: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="poc_linkedin">LinkedIn URL</Label>
+                <Input
+                  id="poc_linkedin"
+                  type="url"
+                  value={pocForm.linkedin_url}
+                  onChange={(e) => setPocForm({ ...pocForm, linkedin_url: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="poc_title">Title/Role</Label>
+                <Input
+                  id="poc_title"
+                  value={pocForm.title}
+                  onChange={(e) => setPocForm({ ...pocForm, title: e.target.value })}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditPocDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleEditPoc}>
+                <Save className="h-4 w-4 mr-2" />
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add POC Dialog */}
+        <Dialog open={addPocDialogOpen} onOpenChange={setAddPocDialogOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Add New Contact</DialogTitle>
+              <DialogDescription>
+                Add a new point of contact for this lead
+                <span className="ml-2 text-xs">(<Kbd>Ctrl</Kbd>+<Kbd>S</Kbd> to save)</span>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="new_poc_name">Name *</Label>
+                <Input
+                  id="new_poc_name"
+                  value={pocForm.name}
+                  onChange={(e) => setPocForm({ ...pocForm, name: e.target.value })}
+                  placeholder="John Doe"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new_poc_email">Email</Label>
+                <Input
+                  id="new_poc_email"
+                  type="email"
+                  value={pocForm.email}
+                  onChange={(e) => setPocForm({ ...pocForm, email: e.target.value })}
+                  placeholder="john@company.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new_poc_linkedin">LinkedIn URL</Label>
+                <Input
+                  id="new_poc_linkedin"
+                  type="url"
+                  value={pocForm.linkedin_url}
+                  onChange={(e) => setPocForm({ ...pocForm, linkedin_url: e.target.value })}
+                  placeholder="https://linkedin.com/in/johndoe"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new_poc_title">Title/Role</Label>
+                <Input
+                  id="new_poc_title"
+                  value={pocForm.title}
+                  onChange={(e) => setPocForm({ ...pocForm, title: e.target.value })}
+                  placeholder="CEO, Product Manager"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAddPocDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleAddPoc}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Contact
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete POC Confirmation Dialog */}
+        <Dialog open={deletePocDialogOpen} onOpenChange={setDeletePocDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Contact</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete {selectedPoc?.name}? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeletePocDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDeletePoc}>
+                Delete Contact
               </Button>
             </DialogFooter>
           </DialogContent>
