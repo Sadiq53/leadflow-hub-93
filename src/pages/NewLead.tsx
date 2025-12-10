@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -7,10 +7,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Trash2, ArrowLeft } from "lucide-react";
+import { Plus, Trash2, ArrowLeft, Keyboard } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
+import { Kbd } from "@/components/ui/kbd";
 
 const pocSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
@@ -39,6 +40,7 @@ interface POC {
 const NewLead = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const formRef = useRef<HTMLFormElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pocs, setPocs] = useState<POC[]>([
     { id: crypto.randomUUID(), name: "", email: "", linkedin_url: "", title: "" }
@@ -47,6 +49,10 @@ const NewLead = () => {
   const addPOC = () => {
     if (pocs.length < 5) {
       setPocs([...pocs, { id: crypto.randomUUID(), name: "", email: "", linkedin_url: "", title: "" }]);
+      toast({
+        title: "POC Added",
+        description: `Contact ${pocs.length + 1} added. Fill in the details.`,
+      });
     }
   };
 
@@ -60,6 +66,43 @@ const NewLead = () => {
     setPocs(pocs.map((poc) => (poc.id === id ? { ...poc, [field]: value } : poc)));
   };
 
+  // Keyboard shortcuts for the form
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Alt+P: Add new POC
+      if (e.altKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        addPOC();
+        return;
+      }
+
+      // Ctrl+S or Alt+S: Submit form
+      if ((e.ctrlKey && e.key.toLowerCase() === "s") || (e.altKey && e.key.toLowerCase() === "s")) {
+        e.preventDefault();
+        formRef.current?.requestSubmit();
+        return;
+      }
+
+      // Ctrl+Enter: Submit and stay
+      if (e.ctrlKey && e.key === "Enter") {
+        e.preventDefault();
+        formRef.current?.requestSubmit();
+        return;
+      }
+
+      // Escape: Go back
+      if (e.key === "Escape") {
+        const target = e.target as HTMLElement;
+        if (target.tagName !== "INPUT" && target.tagName !== "TEXTAREA") {
+          navigate("/leads");
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [pocs.length]);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -67,7 +110,6 @@ const NewLead = () => {
     try {
       const formData = new FormData(e.currentTarget);
       
-      // Validate lead data
       const leadData = {
         company_name: formData.get("company_name") as string,
         company_website: formData.get("company_website") as string,
@@ -79,7 +121,6 @@ const NewLead = () => {
 
       leadSchema.parse(leadData);
 
-      // Validate POCs
       const validPocs = pocs.filter(poc => poc.name.trim() !== "");
       if (validPocs.length === 0) {
         throw new Error("At least one point of contact is required");
@@ -92,7 +133,6 @@ const NewLead = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
-      // Create lead
       const { data: lead, error: leadError } = await supabase
         .from("leads")
         .insert({
@@ -109,7 +149,6 @@ const NewLead = () => {
 
       if (leadError) throw leadError;
 
-      // Create POCs and get their IDs back
       const { data: createdPocs, error: pocsError } = await supabase
         .from("pocs")
         .insert(
@@ -125,7 +164,6 @@ const NewLead = () => {
 
       if (pocsError) throw pocsError;
 
-      // Log activity
       await supabase.from("activities").insert({
         lead_id: lead.id,
         user_id: user.id,
@@ -133,12 +171,10 @@ const NewLead = () => {
         payload: { company: leadData.company_name, poc_count: validPocs.length }
       });
 
-      // Create notifications for 3-day sequence
       const notifications = [];
       const now = new Date();
       
       for (const poc of createdPocs || []) {
-        // Day 1 - Connection (scheduled immediately for today)
         const day1 = new Date(now);
         notifications.push({
           user_id: user.id,
@@ -150,7 +186,6 @@ const NewLead = () => {
         });
       }
 
-      // Insert initial connection notifications
       if (notifications.length > 0) {
         await supabase.from("notifications").insert(notifications);
       }
@@ -183,17 +218,26 @@ const NewLead = () => {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/leads")}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Add New Lead</h1>
-            <p className="text-muted-foreground">Create a new company lead with contact persons</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/leads")}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Add New Lead</h1>
+              <p className="text-muted-foreground">Create a new company lead with contact persons</p>
+            </div>
+          </div>
+          <div className="hidden md:flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-lg">
+            <Keyboard className="h-3.5 w-3.5" />
+            <span>Shortcuts:</span>
+            <span className="flex items-center gap-1"><Kbd>Alt</Kbd>+<Kbd>P</Kbd> Add POC</span>
+            <span className="text-muted-foreground/50">|</span>
+            <span className="flex items-center gap-1"><Kbd>Ctrl</Kbd>+<Kbd>S</Kbd> Save</span>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form ref={formRef} onSubmit={handleSubmit}>
           <div className="space-y-6">
             <Card>
               <CardHeader>
@@ -235,7 +279,10 @@ const NewLead = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle>Points of Contact</CardTitle>
-                    <CardDescription>Add 1-5 people to reach out to at this company</CardDescription>
+                    <CardDescription>
+                      Add 1-5 people to reach out to at this company
+                      <span className="ml-2 text-xs">(<Kbd>Alt</Kbd>+<Kbd>P</Kbd> to add)</span>
+                    </CardDescription>
                   </div>
                   {pocs.length < 5 && (
                     <Button type="button" variant="outline" size="sm" onClick={addPOC}>
@@ -306,13 +353,18 @@ const NewLead = () => {
               </CardContent>
             </Card>
 
-            <div className="flex justify-end space-x-4">
-              <Button type="button" variant="outline" onClick={() => navigate("/leads")}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Creating..." : "Create Lead"}
-              </Button>
+            <div className="flex justify-between items-center">
+              <p className="text-xs text-muted-foreground hidden md:block">
+                <Kbd>Esc</Kbd> to cancel • <Kbd>Ctrl</Kbd>+<Kbd>S</Kbd> to save
+              </p>
+              <div className="flex justify-end space-x-4 ml-auto">
+                <Button type="button" variant="outline" onClick={() => navigate("/leads")}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Creating..." : "Create Lead"}
+                </Button>
+              </div>
             </div>
           </div>
         </form>
